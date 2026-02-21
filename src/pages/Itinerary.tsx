@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useQueryClient } from "@tanstack/react-query";
 import RegretPlanner from "@/components/RegretPlanner";
 import DisruptionReplanner from "@/components/DisruptionReplanner";
+import CollaborativePlanner from "@/components/CollaborativePlanner";
 
 const typeIcons: Record<string, React.ReactNode> = {
   food: <Utensils className="w-4 h-4" />,
@@ -338,6 +339,15 @@ export default function Itinerary() {
           activeItineraryId={activeItinerary?.id}
           onReplanApplied={() => {
             queryClient.invalidateQueries({ queryKey: ["itineraries", tripId] });
+            queryClient.invalidateQueries({ queryKey: ["activities"] });
+          }}
+        />
+
+        {/* Collaborative Planning Space */}
+        <CollaborativePlanner
+          tripId={tripId!}
+          activities={activities as any}
+          onActivityUpdated={() => {
             queryClient.invalidateQueries({ queryKey: ["activities"] });
           }}
         />
