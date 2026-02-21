@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ChevronLeft, ChevronRight, MapPin, Clock, Utensils, Camera, ShoppingBag, Bus,
-  MessageSquare, Edit, Loader2, Brain, AlertTriangle, Send, RefreshCw, Zap
+  MessageSquare, Edit, Loader2, Brain, AlertTriangle, Send, RefreshCw, Zap, Map as MapIcon
 } from "lucide-react";
 import { formatCurrency } from "@/lib/currency";
 import { useTrip, useTrips, useItineraries, useActivities } from "@/hooks/useTrips";
@@ -13,6 +13,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import RegretPlanner from "@/components/RegretPlanner";
 import DisruptionReplanner from "@/components/DisruptionReplanner";
 import CollaborativePlanner from "@/components/CollaborativePlanner";
+import WorldMap from "@/components/WorldMap";
+import Map3D from "@/components/Map3D";
 
 const typeIcons: Record<string, React.ReactNode> = {
   food: <Utensils className="w-4 h-4" />,
@@ -54,6 +56,25 @@ export default function Itinerary() {
   const [sendingMsg, setSendingMsg] = useState(false);
   const [replanning, setReplanning] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const [destCoords, setDestCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [destMapMode, setDestMapMode] = useState<"2d" | "3d">("2d");
+  const [showDestMap, setShowDestMap] = useState(true);
+
+  // Geocode trip destination for map
+  useEffect(() => {
+    if (!trip?.destination) { setDestCoords(null); return; }
+    const geocode = async () => {
+      try {
+        const res = await supabase.functions.invoke("nominatim", {
+          body: { action: "search", query: `${trip.destination} ${trip.country || ""}`.trim(), limit: 1 },
+        });
+        if (res.data && res.data.length > 0) {
+          setDestCoords({ lat: parseFloat(res.data[0].lat), lng: parseFloat(res.data[0].lon) });
+        }
+      } catch { /* silently fail */ }
+    };
+    geocode();
+  }, [trip?.destination, trip?.country]);
 
   // Load messages for chat
   useEffect(() => {
@@ -350,6 +371,49 @@ export default function Itinerary() {
             </div>
           )}
         </div>
+
+        {/* Destination Map */}
+        {destCoords && (
+          <div className="bg-card rounded-2xl shadow-card mb-6 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+              <div className="flex items-center gap-2">
+                <MapIcon className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold text-card-foreground">{trip.destination} Map</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex bg-secondary rounded-lg border border-border overflow-hidden">
+                  <button
+                    onClick={() => setDestMapMode("2d")}
+                    className={`px-3 py-1 text-xs font-semibold transition-colors ${
+                      destMapMode === "2d" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >2D</button>
+                  <button
+                    onClick={() => setDestMapMode("3d")}
+                    className={`px-3 py-1 text-xs font-semibold transition-colors ${
+                      destMapMode === "3d" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >3D</button>
+                </div>
+                <button
+                  onClick={() => setShowDestMap(!showDestMap)}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {showDestMap ? "Hide" : "Show"}
+                </button>
+              </div>
+            </div>
+            {showDestMap && (
+              <div className="h-[300px]">
+                {destMapMode === "2d" ? (
+                  <WorldMap lat={destCoords.lat} lng={destCoords.lng} name={trip.destination} zoom={10} className="w-full h-full" />
+                ) : (
+                  <Map3D lat={destCoords.lat} lng={destCoords.lng} name={trip.destination} zoom={10} className="w-full h-full" />
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Regret-Aware Counterfactual Planner */}
         <RegretPlanner
