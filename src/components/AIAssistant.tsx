@@ -202,29 +202,32 @@ export default function AIAssistant() {
   };
 
   // Dragging state
-  const [pos, setPos] = useState({ x: window.innerWidth - 90, y: window.innerHeight - 90 });
-  const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number; dragging: boolean }>({ startX: 0, startY: 0, startPosX: 0, startPosY: 0, dragging: false });
+  const [pos, setPos] = useState({ x: window.innerWidth - 100, y: window.innerHeight - 100 });
+  const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number; dragging: boolean; pointerDown: boolean }>({ startX: 0, startY: 0, startPosX: 0, startPosY: 0, dragging: false, pointerDown: false });
 
   const onPointerDown = (e: React.PointerEvent) => {
-    dragRef.current = { startX: e.clientX, startY: e.clientY, startPosX: pos.x, startPosY: pos.y, dragging: false };
+    dragRef.current = { startX: e.clientX, startY: e.clientY, startPosX: pos.x, startPosY: pos.y, dragging: false, pointerDown: true };
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent) => {
     const d = dragRef.current;
+    if (!d.pointerDown) return;
     const dx = e.clientX - d.startX;
     const dy = e.clientY - d.startY;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) d.dragging = true;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) d.dragging = true;
     if (d.dragging) {
-      setPos({ x: Math.max(0, Math.min(window.innerWidth - 70, d.startPosX + dx)), y: Math.max(0, Math.min(window.innerHeight - 70, d.startPosY + dy)) });
+      setPos({ x: Math.max(0, Math.min(window.innerWidth - 80, d.startPosX + dx)), y: Math.max(0, Math.min(window.innerHeight - 80, d.startPosY + dy)) });
     }
   };
   const onPointerUp = () => {
     if (!dragRef.current.dragging) setOpen(true);
+    dragRef.current.pointerDown = false;
+    dragRef.current.dragging = false;
   };
 
   return (
     <>
-      {/* Floating draggable bot */}
+      {/* Floating draggable bot - always visible */}
       {!open && (
         <img
           src={orangeBot}
@@ -233,7 +236,7 @@ export default function AIAssistant() {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           style={{ left: pos.x, top: pos.y }}
-          className="fixed z-50 w-16 h-16 cursor-grab active:cursor-grabbing select-none hover:scale-110 transition-transform drop-shadow-lg animate-fade-in touch-none"
+          className="fixed z-50 w-20 h-20 cursor-grab active:cursor-grabbing select-none hover:scale-110 transition-transform drop-shadow-lg animate-fade-in touch-none"
           draggable={false}
         />
       )}

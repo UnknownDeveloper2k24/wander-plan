@@ -1,4 +1,4 @@
-import { Search, Mic, MicOff, Plus, MapPin, Calendar, IndianRupee, Loader2, Users, User, Globe } from "lucide-react";
+import { Search, Mic, MicOff, Plus, MapPin, Calendar, IndianRupee, Loader2, Users, User, Globe, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTrips } from "@/hooks/useTrips";
 import { useState, useRef } from "react";
@@ -159,6 +159,19 @@ export default function Dashboard() {
   const getDaysLeft = (dateStr: string) => {
     const diff = new Date(dateStr).getTime() - new Date().getTime();
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  };
+
+  const handleDeleteTrip = async (tripId: string, tripName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Delete "${tripName}"? This cannot be undone.`)) return;
+    try {
+      const { error } = await supabase.from("trips").delete().eq("id", tripId);
+      if (error) throw error;
+      toast({ title: "Trip deleted", description: `"${tripName}" has been removed.` });
+      queryClient.invalidateQueries({ queryKey: ["trips"] });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
   };
 
   return (
@@ -362,7 +375,16 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="p-4">
-                    <h3 className="font-semibold text-card-foreground text-sm">{trip.name}</h3>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-card-foreground text-sm">{trip.name}</h3>
+                      <button
+                        onClick={(e) => handleDeleteTrip(trip.id, trip.name, e)}
+                        className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Delete trip"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                     <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                       <MapPin className="w-3 h-3" />
                       {trip.destination}{trip.country ? `, ${trip.country}` : ""}
