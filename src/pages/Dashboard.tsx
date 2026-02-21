@@ -1,4 +1,4 @@
-import { Search, Mic, MicOff, Plus, MapPin, Calendar, IndianRupee, Loader2 } from "lucide-react";
+import { Search, Mic, MicOff, Plus, MapPin, Calendar, IndianRupee, Loader2, Users, User, Globe } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTrips } from "@/hooks/useTrips";
 import { useState, useRef } from "react";
@@ -7,6 +7,21 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
+import destinationAgra from "@/assets/destination-agra.jpg";
+import destinationGoa from "@/assets/destination-goa.jpg";
+import destinationKerala from "@/assets/destination-kerala.jpg";
+import travelBeach from "@/assets/travel-beach.jpg";
+import travelBoat from "@/assets/travel-boat.jpg";
+import travelOcean from "@/assets/travel-ocean.jpg";
+
+const tripImages = [destinationAgra, destinationGoa, destinationKerala, travelBeach, travelBoat, travelOcean];
+
+const tripTypes = [
+  { value: "solo", label: "Solo Plan", icon: User, description: "Travel alone at your own pace" },
+  { value: "group", label: "Group Plan", icon: Users, description: "Plan with friends & family" },
+  { value: "random", label: "Meet Travelers", icon: Globe, description: "Match with random travelers" },
+];
+
 export default function Dashboard() {
   const { user } = useAuth();
   const { data: trips = [], isLoading } = useTrips();
@@ -14,6 +29,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showNewTrip, setShowNewTrip] = useState(false);
+  const [selectedTripType, setSelectedTripType] = useState("solo");
   const [newTrip, setNewTrip] = useState({
     name: "",
     destination: "",
@@ -35,7 +51,7 @@ export default function Dashboard() {
     e.preventDefault();
     setCreating(true);
     try {
-      const { error } = await supabase.from("trips").insert({
+      const { data: tripData, error } = await supabase.from("trips").insert({
         name: newTrip.name,
         destination: newTrip.destination,
         country: newTrip.country,
@@ -43,12 +59,17 @@ export default function Dashboard() {
         end_date: newTrip.end_date,
         budget_total: Number(newTrip.budget_total) || 0,
         organizer_id: user!.id,
-      });
+      }).select().single();
       if (error) throw error;
-      toast({ title: "Trip created!", description: `${newTrip.destination} trip is ready.` });
+      toast({ title: "Trip created!", description: `${newTrip.destination} ${selectedTripType} trip is ready.` });
       setShowNewTrip(false);
       setNewTrip({ name: "", destination: "", country: "India", start_date: "", end_date: "", budget_total: "" });
+      setSelectedTripType("solo");
       queryClient.invalidateQueries({ queryKey: ["trips"] });
+
+      if (tripData) {
+        navigate(`/itinerary/${tripData.id}`);
+      }
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
@@ -56,7 +77,7 @@ export default function Dashboard() {
     }
   };
 
-  // Voice-First Planning: Web Speech API → AI Intent Extraction → Pre-fill form
+  // Voice-First Planning
   const startVoiceCapture = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -90,7 +111,6 @@ export default function Dashboard() {
         if (res.error) throw new Error(res.error.message);
         const intent = res.data;
 
-        // Pre-fill form with extracted intent
         const today = new Date();
         const startDate = intent.start_date || today.toISOString().split("T")[0];
         const days = intent.duration_days || 3;
@@ -104,6 +124,9 @@ export default function Dashboard() {
           end_date: endDate,
           budget_total: intent.budget_range?.max?.toString() || "",
         });
+        if (intent.trip_type === "solo" || intent.trip_type === "couple") setSelectedTripType("solo");
+        else if (intent.trip_type === "friends" || intent.trip_type === "family") setSelectedTripType("group");
+        else setSelectedTripType("solo");
         setShowNewTrip(true);
         toast({ title: "Voice captured!", description: `Destination: ${intent.destination || "Not detected"}. Review and confirm.` });
       } catch (error: any) {
@@ -192,6 +215,33 @@ export default function Dashboard() {
         {showNewTrip && (
           <form onSubmit={handleCreateTrip} className="bg-card rounded-2xl p-5 shadow-card space-y-4 animate-fade-in">
             <h3 className="font-semibold text-card-foreground">New Trip</h3>
+            
+            {/* Trip Type Selector */}
+            <div>
+              <p className="text-sm text-muted-foreground mb-2">Choose your travel style</p>
+              <div className="grid grid-cols-3 gap-3">
+                {tripTypes.map((type) => {
+                  const Icon = type.icon;
+                  return (
+                    <button
+                      key={type.value}
+                      type="button"
+                      onClick={() => setSelectedTripType(type.value)}
+                      className={`p-3 rounded-xl border-2 text-left transition-all ${
+                        selectedTripType === type.value
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/30 bg-background"
+                      }`}
+                    >
+                      <Icon className={`w-5 h-5 mb-1.5 ${selectedTripType === type.value ? "text-primary" : "text-muted-foreground"}`} />
+                      <p className={`text-sm font-semibold ${selectedTripType === type.value ? "text-primary" : "text-card-foreground"}`}>{type.label}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{type.description}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <input
                 placeholder="Trip name"
@@ -277,16 +327,19 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-4">
-              {trips.map((trip) => (
+              {trips.map((trip, idx) => (
                 <div
                   key={trip.id}
                   onClick={() => navigate(`/itinerary/${trip.id}`)}
                   className="bg-card rounded-2xl overflow-hidden shadow-card hover:shadow-elevated transition-shadow cursor-pointer group"
                 >
-                  <div className="relative h-32 overflow-hidden bg-primary/10">
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <MapPin className="w-8 h-8 text-primary/30" />
-                    </div>
+                  <div className="relative h-32 overflow-hidden">
+                    <img
+                      src={trip.image_url || tripImages[idx % tripImages.length]}
+                      alt={trip.destination}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                     <div className="absolute bottom-3 right-3 bg-card/90 backdrop-blur-sm px-2.5 py-1 rounded-lg text-xs font-semibold">
                       <span className="text-foreground">{getDaysLeft(trip.start_date)} days left</span>
                     </div>
