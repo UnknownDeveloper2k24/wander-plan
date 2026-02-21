@@ -51,7 +51,8 @@ export default function Dashboard() {
     e.preventDefault();
     setCreating(true);
     try {
-      const { data: tripData, error } = await supabase.from("trips").insert({
+      // Insert without .select() to avoid RLS SELECT policy timing issue
+      const { error: insertError } = await supabase.from("trips").insert({
         name: newTrip.name,
         destination: newTrip.destination,
         country: newTrip.country,
@@ -59,16 +60,22 @@ export default function Dashboard() {
         end_date: newTrip.end_date,
         budget_total: Number(newTrip.budget_total) || 0,
         organizer_id: user!.id,
-      }).select().single();
-      if (error) throw error;
+      });
+      if (insertError) throw insertError;
       toast({ title: "Trip created!", description: `${newTrip.destination} ${selectedTripType} trip is ready.` });
       setShowNewTrip(false);
       setNewTrip({ name: "", destination: "", country: "India", start_date: "", end_date: "", budget_total: "" });
       setSelectedTripType("solo");
       queryClient.invalidateQueries({ queryKey: ["trips"] });
 
-      if (tripData) {
-        navigate(`/itinerary/${tripData.id}`);
+      // Fetch the newly created trip to navigate
+      const { data: newTrips } = await supabase.from("trips")
+        .select("id")
+        .eq("organizer_id", user!.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (newTrips && newTrips.length > 0) {
+        navigate(`/itinerary/${newTrips[0].id}`);
       }
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
