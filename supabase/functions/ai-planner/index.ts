@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 const AI_GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
@@ -75,7 +75,110 @@ All costs must be in INR (₹). Include realistic Indian destinations, restauran
         }
 
         const content = data.choices?.[0]?.message?.content || '';
-        // Extract JSON from response
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { error: 'Failed to parse response' };
+
+        return new Response(JSON.stringify(parsed), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      case 'regret-counterfactual': {
+        const { destination, days, travelers, budget, interests, tripType } = params;
+
+        const prompt = `You are an expert travel planner specializing in regret-aware counterfactual planning. Generate 3 ALTERNATIVE itinerary plans for ${travelers} travelers visiting ${destination} for ${days} days.
+
+Budget: ₹${budget} INR total
+Trip type: ${tripType || 'leisure'}
+Interests: ${interests?.join(', ') || 'general sightseeing'}
+
+Generate EXACTLY 3 plans with different strategies:
+
+1. **Budget Focused** — Minimize cost while still having a good trip. Use budget hotels, street food, free attractions. Stay well under budget.
+2. **Balanced** — Best value for money. Mix of paid and free activities, mid-range dining, popular attractions. Optimal time management.
+3. **Experience Focused** — Maximize unique experiences regardless of cost (but stay within budget). Premium restaurants, exclusive tours, unique local experiences.
+
+For EACH plan, you must calculate these risk metrics (0-100 scale):
+- fatigue_level: Physical exhaustion risk. More activities, walking, early starts = higher fatigue. Budget plans with more walking = moderate. Experience plans with packed schedules = high.
+- budget_overrun_risk: Probability of exceeding budget. Budget plans = low (10-25). Balanced = moderate (30-50). Experience = high (50-80).
+- experience_quality: Overall quality of experiences. Budget = moderate (40-60). Balanced = good (60-75). Experience = excellent (80-95).
+
+Return this exact JSON structure:
+{
+  "plans": [
+    {
+      "variant": "budget",
+      "label": "Budget Focused",
+      "tagline": "Maximum savings, smart choices",
+      "total_cost": 12000,
+      "fatigue_level": 55,
+      "budget_overrun_risk": 15,
+      "experience_quality": 50,
+      "regret_score": 0.35,
+      "activities": [
+        {
+          "name": "Activity name",
+          "description": "Brief description",
+          "location_name": "Location",
+          "start_time": "2025-01-01T08:00:00+05:30",
+          "end_time": "2025-01-01T09:30:00+05:30",
+          "category": "food|attraction|transport|shopping",
+          "cost": 200,
+          "estimated_steps": 3000,
+          "review_score": 4.2,
+          "priority": 0.7,
+          "notes": "Tip"
+        }
+      ],
+      "daily_summary": ["Day 1: ...", "Day 2: ..."],
+      "pros": ["Cheap", "Authentic"],
+      "cons": ["Fewer premium experiences"]
+    },
+    {
+      "variant": "balanced",
+      "label": "Balanced",
+      ...same structure...
+    },
+    {
+      "variant": "experience",
+      "label": "Experience Focused",
+      ...same structure...
+    }
+  ],
+  "recommendation": "balanced",
+  "comparison_note": "Brief explanation of trade-offs between the 3 plans"
+}
+
+IMPORTANT:
+- All costs in INR (₹)
+- Activities should have realistic Indian locations with approximate lat/lng
+- Each plan should have ${days * 4}-${days * 6} activities spread across all days
+- The regret_score should be 0.0-1.0 where lower = less regret (budget plans have higher regret on experience, experience plans have higher regret on budget)
+- Make start_time/end_time use the proper date range starting from tomorrow`;
+
+        const response = await fetch(AI_GATEWAY_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-3-flash-preview',
+            messages: [
+              { role: 'system', content: 'You are an expert travel planner. Always respond with valid JSON only. No markdown, no explanation, just JSON.' },
+              { role: 'user', content: prompt },
+            ],
+            temperature: 0.8,
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(`AI Gateway error [${response.status}]: ${JSON.stringify(data)}`);
+        }
+
+        const content = data.choices?.[0]?.message?.content || '';
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { error: 'Failed to parse response' };
 
