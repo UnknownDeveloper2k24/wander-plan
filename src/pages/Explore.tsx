@@ -1,55 +1,106 @@
 import { useState } from "react";
-import { Search, Star, Heart, MapPin, Filter } from "lucide-react";
-import { exploreCards } from "@/data/mockData";
+import { Search, Star, Heart, MapPin, Filter, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
-const filters = ["All", "Landmark", "Experience", "Temple", "Nature", "Market", "District"];
-const moods = ["All Moods", "Adventurous", "Cultural", "Peaceful", "Exciting", "Fun"];
+const categories = ["All", "Cultural", "Natural", "Historic", "Architecture", "Religion", "Urban"];
 
 export default function Explore() {
-  const [activeFilter, setActiveFilter] = useState("All");
-  const [activeMood, setActiveMood] = useState("All Moods");
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeFilter, setActiveFilter] = useState("All");
+  const [places, setPlaces] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const { toast } = useToast();
 
-  const filtered = exploreCards.filter((card) => {
-    const matchesFilter = activeFilter === "All" || card.category === activeFilter;
-    const matchesMood = activeMood === "All Moods" || card.mood === activeMood;
-    const matchesSearch =
-      !searchQuery || card.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFilter && matchesMood && matchesSearch;
-  });
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    setLoading(true);
+    setSearched(true);
+
+    try {
+      // First geocode the location using Nominatim
+      const geoRes = await supabase.functions.invoke("nominatim", {
+        body: { action: "search", query: searchQuery, limit: 1 },
+      });
+
+      if (geoRes.error || !geoRes.data || geoRes.data.length === 0) {
+        toast({ title: "Location not found", description: "Try a different search term.", variant: "destructive" });
+        setPlaces([]);
+        setLoading(false);
+        return;
+      }
+
+      const { lat, lon } = geoRes.data[0];
+
+      // Then find places nearby using OpenTripMap
+      const kinds = activeFilter === "All" ? "interesting_places" : activeFilter.toLowerCase();
+      const placesRes = await supabase.functions.invoke("opentripmap", {
+        body: { action: "radius", lat: parseFloat(lat), lon: parseFloat(lon), radius: 10000, kinds, limit: 20 },
+      });
+
+      if (placesRes.error) throw new Error(placesRes.error.message);
+
+      const items = Array.isArray(placesRes.data) ? placesRes.data : [];
+      // Fetch details for top items
+      const detailed = await Promise.all(
+        items.slice(0, 12).map(async (p: any) => {
+          if (!p.xid) return null;
+          try {
+            const detailRes = await supabase.functions.invoke("opentripmap", {
+              body: { action: "details", xid: p.xid },
+            });
+            return detailRes.data;
+          } catch {
+            return p;
+          }
+        })
+      );
+
+      setPlaces(detailed.filter(Boolean).filter((p: any) => p.name));
+    } catch (error: any) {
+      toast({ title: "Search failed", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="p-6">
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Explore</h1>
+          <h1 className="text-2xl font-bold text-foreground">Explore India</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Discover amazing places for your next adventure
           </p>
         </div>
       </div>
 
-      {/* Search + Filter */}
+      {/* Search */}
       <div className="flex gap-3 mb-5">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search places, activities..."
+            placeholder="Search a city or destination..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-card border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-card"
           />
         </div>
-        <button className="p-2.5 rounded-xl bg-card border border-border hover:bg-secondary transition-colors shadow-card">
-          <Filter className="w-4 h-4 text-muted-foreground" />
+        <button
+          onClick={handleSearch}
+          disabled={loading}
+          className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}
         </button>
       </div>
 
       {/* Category Filters */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-        {filters.map((f) => (
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
+        {categories.map((f) => (
           <button
             key={f}
             onClick={() => setActiveFilter(f)}
@@ -64,72 +115,89 @@ export default function Explore() {
         ))}
       </div>
 
-      {/* Mood Filters */}
-      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-        {moods.map((m) => (
-          <button
-            key={m}
-            onClick={() => setActiveMood(m)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
-              activeMood === m
-                ? "bg-accent text-accent-foreground"
-                : "bg-secondary text-muted-foreground hover:text-secondary-foreground"
-            }`}
-          >
-            {m}
-          </button>
-        ))}
-      </div>
-
-      {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filtered.map((card, i) => (
-          <div
-            key={card.id}
-            className="bg-card rounded-2xl overflow-hidden shadow-card hover:shadow-elevated transition-all cursor-pointer group animate-fade-in"
-            style={{ animationDelay: `${i * 0.05}s` }}
-          >
-            <div className="relative h-44 overflow-hidden">
-              <img
-                src={card.image}
-                alt={card.name}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              />
-              <button className="absolute top-3 right-3 w-8 h-8 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center hover:bg-card transition-colors">
-                <Heart className="w-4 h-4 text-primary" />
-              </button>
-              <div className="absolute bottom-3 left-3 px-2.5 py-1 rounded-lg bg-card/80 backdrop-blur-sm text-xs font-semibold text-card-foreground">
-                {card.budget}
+      {/* Results */}
+      {!searched ? (
+        <div className="text-center py-20">
+          <Compass className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+          <h3 className="font-semibold text-foreground text-lg">Search to discover places</h3>
+          <p className="text-sm text-muted-foreground mt-1">Try "Jaipur", "Goa", "Rishikesh" and more</p>
+        </div>
+      ) : loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      ) : places.length === 0 ? (
+        <div className="text-center py-20">
+          <MapPin className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+          <h3 className="font-semibold text-foreground">No places found</h3>
+          <p className="text-sm text-muted-foreground mt-1">Try a different location or category</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {places.map((place, i) => (
+            <div
+              key={place.xid || i}
+              className="bg-card rounded-2xl overflow-hidden shadow-card hover:shadow-elevated transition-all cursor-pointer group animate-fade-in"
+              style={{ animationDelay: `${i * 0.05}s` }}
+            >
+              <div className="relative h-44 overflow-hidden bg-primary/5">
+                {place.preview?.source ? (
+                  <img
+                    src={place.preview.source}
+                    alt={place.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <MapPin className="w-10 h-10 text-primary/20" />
+                  </div>
+                )}
+                <button className="absolute top-3 right-3 w-8 h-8 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center hover:bg-card transition-colors">
+                  <Heart className="w-4 h-4 text-primary" />
+                </button>
+              </div>
+              <div className="p-4">
+                <h3 className="font-semibold text-card-foreground">{place.name}</h3>
+                {place.address?.city && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <MapPin className="w-3 h-3 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">
+                      {[place.address.city, place.address.state].filter(Boolean).join(", ")}
+                    </span>
+                  </div>
+                )}
+                {place.rate && (
+                  <div className="flex items-center gap-1 mt-2">
+                    <Star className="w-3 h-3 text-warning fill-warning" />
+                    <span className="text-xs font-semibold text-card-foreground">{place.rate}</span>
+                  </div>
+                )}
+                {place.kinds && (
+                  <div className="flex gap-1.5 mt-3 flex-wrap">
+                    {place.kinds.split(",").slice(0, 3).map((tag: string) => (
+                      <span
+                        key={tag}
+                        className="px-2 py-0.5 rounded-full bg-secondary text-xs font-medium text-secondary-foreground capitalize"
+                      >
+                        {tag.replace(/_/g, " ")}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
-            <div className="p-4">
-              <h3 className="font-semibold text-card-foreground">{card.name}</h3>
-              <div className="flex items-center gap-1 mt-1">
-                <MapPin className="w-3 h-3 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">{card.location}</span>
-              </div>
-              <div className="flex items-center gap-1 mt-2">
-                <Star className="w-3 h-3 text-warning fill-warning" />
-                <span className="text-xs font-semibold text-card-foreground">{card.rating}</span>
-                <span className="text-xs text-muted-foreground">({card.reviews})</span>
-              </div>
-              <div className="flex gap-1.5 mt-3 flex-wrap">
-                {card.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="px-2 py-0.5 rounded-full bg-secondary text-xs font-medium text-secondary-foreground"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-              <button className="mt-3 w-full py-2 rounded-xl bg-primary/10 text-primary text-sm font-semibold hover:bg-primary/20 transition-colors">
-                Save to Trip
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+function Compass(props: any) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="12" cy="12" r="10"/>
+      <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+    </svg>
   );
 }
