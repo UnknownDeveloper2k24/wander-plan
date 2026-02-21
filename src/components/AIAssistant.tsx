@@ -29,6 +29,8 @@ export default function AIAssistant() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
   const wakeRecognitionRef = useRef<any>(null);
+  const isListeningRef = useRef(false);
+  const wakeActiveRef = useRef(false);
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -38,12 +40,22 @@ export default function AIAssistant() {
 
   // Wake word listener - continuously listens for "hey jinny"
   useEffect(() => {
-    if (open) return; // Don't listen when chat is already open
+    if (open) {
+      // Stop wake listener when chat opens
+      wakeActiveRef.current = false;
+      try { wakeRecognitionRef.current?.stop(); } catch {}
+      setWakeListening(false);
+      return;
+    }
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return;
 
+    wakeActiveRef.current = true;
+
     const startWakeListener = () => {
+      if (!wakeActiveRef.current) return;
+
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
@@ -51,28 +63,36 @@ export default function AIAssistant() {
       wakeRecognitionRef.current = recognition;
 
       recognition.onstart = () => setWakeListening(true);
+
       recognition.onend = () => {
         setWakeListening(false);
-        // Restart if chat isn't open
-        if (!open) {
+        // Auto-restart if wake listening should be active
+        if (wakeActiveRef.current) {
           setTimeout(() => {
             try { startWakeListener(); } catch {}
-          }, 500);
+          }, 300);
         }
       };
+
       recognition.onerror = (e: any) => {
         setWakeListening(false);
-        // Restart on non-fatal errors
-        if (e.error !== "not-allowed" && e.error !== "service-not-allowed") {
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+          wakeActiveRef.current = false;
+          return;
+        }
+        // Auto-restart on recoverable errors (no-speech, network, etc.)
+        if (wakeActiveRef.current) {
           setTimeout(() => {
             try { startWakeListener(); } catch {}
           }, 1000);
         }
       };
+
       recognition.onresult = (event: any) => {
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript.toLowerCase().trim();
           if (transcript.includes("hey jinny") || transcript.includes("hey jenny") || transcript.includes("hey ginny")) {
+            wakeActiveRef.current = false;
             recognition.stop();
             setOpen(true);
             toast({ title: "🧡 Jinny activated!", description: "Hey! How can I help you?" });
@@ -87,6 +107,7 @@ export default function AIAssistant() {
     startWakeListener();
 
     return () => {
+      wakeActiveRef.current = false;
       try { wakeRecognitionRef.current?.stop(); } catch {}
     };
   }, [open, toast]);
@@ -115,15 +136,17 @@ export default function AIAssistant() {
 
       if (action.action === "create_trip" && user) {
         const today = new Date();
-        const start = today.toISOString().split("T")[0];
-        const end = new Date(today.getTime() + (action.days || 3) * 86400000).toISOString().split("T")[0];
+        const startStr = formatLocalDate(today);
+        const endDate = new Date(today);
+        endDate.setDate(endDate.getDate() + (action.days || 3));
+        const endStr = formatLocalDate(endDate);
 
         const { error: insertError } = await supabase.from("trips").insert({
           name: action.name || `Trip to ${action.destination}`,
           destination: action.destination,
           country: action.country || "India",
-          start_date: start,
-          end_date: end,
+          start_date: startStr,
+          end_date: endStr,
           budget_total: action.budget || 0,
           organizer_id: user.id,
         });
@@ -231,25 +254,73 @@ export default function AIAssistant() {
     }
   };
 
+  // Continuous voice input with auto-restart
   const startVoice = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       toast({ title: "Not supported", description: "Speech recognition isn't available in this browser.", variant: "destructive" });
       return;
     }
+    if (isListeningRef.current) {
+      stopVoice();
+      return;
+    }
+
     const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
     recognitionRef.current = recognition;
+    isListeningRef.current = true;
+
+    let finalTranscript = "";
+
     recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
-    recognition.onerror = () => setIsListening(false);
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setIsListening(false);
-      sendMessage(transcript);
+
+    recognition.onend = () => {
+      // Auto-restart if still in listening mode
+      if (isListeningRef.current) {
+        try { recognition.start(); } catch {}
+      } else {
+        setIsListening(false);
+        if (finalTranscript.trim()) {
+          sendMessage(finalTranscript.trim());
+          finalTranscript = "";
+        }
+      }
     };
+
+    recognition.onerror = (e: any) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        isListeningRef.current = false;
+        setIsListening(false);
+        toast({ title: "Mic blocked", description: "Please allow microphone access.", variant: "destructive" });
+      }
+      // no-speech and other errors auto-recover via onend restart
+    };
+
+    recognition.onresult = (event: any) => {
+      let interim = "";
+      finalTranscript = "";
+      for (let i = 0; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript + " ";
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+      // Show interim as input preview
+      if (interim) setInput(interim);
+      if (finalTranscript.trim()) setInput(finalTranscript.trim());
+    };
+
     recognition.start();
+  };
+
+  const stopVoice = () => {
+    isListeningRef.current = false;
+    try { recognitionRef.current?.stop(); } catch {}
+    setIsListening(false);
   };
 
   const handleQuickAction = (prompt: string) => {
@@ -385,7 +456,7 @@ export default function AIAssistant() {
           <div className="p-3 border-t border-border">
             <div className="flex items-center gap-2">
               <button
-                onClick={isListening ? () => { recognitionRef.current?.stop(); setIsListening(false); } : startVoice}
+                onClick={isListening ? stopVoice : startVoice}
                 className={`p-2 rounded-lg transition-colors ${
                   isListening ? "bg-destructive text-destructive-foreground animate-pulse" : "hover:bg-secondary text-muted-foreground"
                 }`}
@@ -413,4 +484,12 @@ export default function AIAssistant() {
       )}
     </>
   );
+}
+
+// Helper: format date as local YYYY-MM-DD string (avoids UTC shift)
+function formatLocalDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
