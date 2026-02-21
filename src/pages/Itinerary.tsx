@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useQueryClient } from "@tanstack/react-query";
+import RegretPlanner from "@/components/RegretPlanner";
 
 const typeIcons: Record<string, React.ReactNode> = {
   food: <Utensils className="w-4 h-4" />,
@@ -317,12 +318,25 @@ export default function Itinerary() {
           )}
         </div>
 
+        {/* Regret-Aware Counterfactual Planner */}
+        <RegretPlanner
+          tripId={tripId!}
+          destination={trip.destination}
+          days={Math.max(1, Math.ceil((new Date(trip.end_date).getTime() - new Date(trip.start_date).getTime()) / 86400000))}
+          budget={Number(trip.budget_total) || 30000}
+          activeItineraryId={activeItinerary?.id}
+          onPlanApplied={() => {
+            queryClient.invalidateQueries({ queryKey: ["itineraries", tripId] });
+            queryClient.invalidateQueries({ queryKey: ["activities"] });
+          }}
+        />
+
         {activities.length === 0 ? (
           <div className="bg-card rounded-2xl p-8 text-center shadow-card">
             <Brain className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
             <h3 className="font-semibold text-card-foreground">No activities yet</h3>
             <p className="text-sm text-muted-foreground mt-1 mb-4">
-              Click "Generate AI Plan" to create a regret-minimized itinerary powered by AI.
+              Use the counterfactual planner above or click below to generate a quick AI plan.
             </p>
             <button
               onClick={handleGenerateItinerary}
@@ -330,7 +344,7 @@ export default function Itinerary() {
               className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
-              {generating ? "Generating..." : "Generate AI Plan"}
+              {generating ? "Generating..." : "Quick Generate"}
             </button>
           </div>
         ) : (
