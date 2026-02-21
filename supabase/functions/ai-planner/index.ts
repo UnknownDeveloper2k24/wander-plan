@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,11 +19,46 @@ serve(async (req) => {
 
     const { action, ...params } = await req.json();
 
+    // Load user memory if auth header present
+    let memoryContext = '';
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader) {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+        const supabase = createClient(supabaseUrl, supabaseKey, {
+          global: { headers: { Authorization: authHeader } },
+        });
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase.from('profiles').select('preferences, travel_personality, travel_history').eq('id', user.id).single();
+          if (profile) {
+            const prefs = profile.preferences as Record<string, any> || {};
+            const personality = profile.travel_personality as Record<string, any> || {};
+            const history = profile.travel_history as any[] || [];
+            if (Object.keys(prefs).length > 0 || Object.keys(personality).length > 0) {
+              memoryContext = `\n\n## TRAVELER MEMORY (Use this to personalize the plan):\n`;
+              if (personality.type) memoryContext += `- Personality: ${personality.type} (${personality.description || ''})\n`;
+              if (prefs.preferred_pace) memoryContext += `- Preferred pace: ${prefs.preferred_pace}\n`;
+              if (prefs.favorite_categories?.length) memoryContext += `- Favorite activities: ${prefs.favorite_categories.join(', ')}\n`;
+              if (prefs.cuisine_preferences?.length) memoryContext += `- Cuisine preferences: ${prefs.cuisine_preferences.join(', ')}\n`;
+              if (prefs.accommodation_style) memoryContext += `- Accommodation: ${prefs.accommodation_style}\n`;
+              if (prefs.transport_preference) memoryContext += `- Transport: ${prefs.transport_preference}\n`;
+              if (prefs.time_preference) memoryContext += `- Time preference: ${prefs.time_preference}\n`;
+              if (prefs.avg_daily_budget) memoryContext += `- Avg daily budget: ₹${prefs.avg_daily_budget}\n`;
+              if (history.length > 0) memoryContext += `- Past destinations: ${history.map((h: any) => h.destination || h).join(', ')}\n`;
+              memoryContext += `\nIMPORTANT: Tailor activities, restaurants, pace, and budget allocation based on this traveler's known preferences. Suggest NEW destinations they haven't visited. Match their pace and style.\n`;
+            }
+          }
+        }
+      } catch (e) { console.error('Memory load error:', e); }
+    }
+
     switch (action) {
       case 'plan-itinerary': {
         const { destination, days, travelers, budget, interests, tripType } = params;
 
-        const prompt = `You are an expert Indian travel planner. Create a detailed ${days}-day itinerary for ${travelers} travelers going to ${destination}, India.
+        const prompt = `You are an expert Indian travel planner. Create a detailed ${days}-day itinerary for ${travelers} travelers going to ${destination}, India.${memoryContext}
 
 Budget: ₹${budget} INR total
 Trip type: ${tripType || 'leisure'}
@@ -87,7 +123,7 @@ All costs must be in INR (₹). Include realistic Indian destinations, restauran
       case 'regret-counterfactual': {
         const { destination, days, travelers, budget, interests, tripType } = params;
 
-        const prompt = `You are an expert travel planner specializing in regret-aware counterfactual planning. Generate 3 ALTERNATIVE itinerary plans for ${travelers} travelers visiting ${destination} for ${days} days.
+        const prompt = `You are an expert travel planner specializing in regret-aware counterfactual planning. Generate 3 ALTERNATIVE itinerary plans for ${travelers} travelers visiting ${destination} for ${days} days.${memoryContext}
 
 Budget: ₹${budget} INR total
 Trip type: ${tripType || 'leisure'}
