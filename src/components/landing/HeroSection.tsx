@@ -3,19 +3,21 @@ import { ArrowRight, Star, Globe } from "lucide-react";
 
 export default function HeroSection() {
   return (
-    <section className="pt-32 pb-16 px-6">
-      <div className="max-w-5xl mx-auto text-center">
-        <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-card border border-border text-sm font-medium text-foreground mb-8">
-          <Star className="w-4 h-4 text-warning" />
-          <span className="text-muted-foreground">→</span>
-          <Globe className="w-4 h-4 text-primary" />
-          Explore the world
+    <section className="pt-28 pb-12 px-6">
+      <div className="max-w-4xl mx-auto text-center">
+        {/* Badge */}
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-card border border-border text-sm font-medium text-muted-foreground mb-8">
+          <Star className="w-3.5 h-3.5" />
+          <span>→</span>
+          <Globe className="w-3.5 h-3.5 text-primary" />
+          Explore world
         </div>
 
-        <h1 className="text-5xl md:text-7xl font-extrabold text-foreground leading-[1.1]">
+        {/* Heading */}
+        <h1 className="text-5xl md:text-[4.5rem] font-extrabold text-foreground leading-[1.08] tracking-tight">
           Make Your{" "}
           <span
-            className="text-primary font-serif italic"
+            className="text-primary italic font-normal"
             style={{ fontFamily: "'Playfair Display', serif" }}
           >
             Dream Vacation
@@ -24,18 +26,20 @@ export default function HeroSection() {
           Unforgettable!
         </h1>
 
-        <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+        {/* Subtitle */}
+        <p className="mt-5 text-base text-muted-foreground max-w-lg mx-auto leading-relaxed">
           Get your dream trip planned with expert-guided destinations,
-          booking, transport & more — all in one place, all in ₹ INR.
+          booking, transport & more — all in one
         </p>
 
-        <div className="mt-10">
+        {/* CTA */}
+        <div className="mt-8">
           <Link
             to="/auth?mode=signup"
-            className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-foreground text-background text-base font-semibold hover:opacity-90 transition-opacity shadow-elevated"
+            className="inline-flex items-center gap-2 px-7 py-3 rounded-full bg-foreground text-background text-sm font-semibold hover:opacity-90 transition-opacity"
           >
             Start Planning
-            <ArrowRight className="w-5 h-5" />
+            <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
       </div>

@@ -6,27 +6,27 @@ import travelSummit from "@/assets/travel-summit.jpg";
 import travelOcean from "@/assets/travel-ocean.jpg";
 
 const photos = [
-  { src: travelBeach, alt: "Beach paradise" },
-  { src: travelHiker, alt: "Mountain hiking" },
-  { src: travelBoat, alt: "River boat journey" },
-  { src: travelKayak, alt: "Kayaking adventure" },
-  { src: travelSummit, alt: "Summit celebration" },
-  { src: travelOcean, alt: "Ocean seabirds" },
+  { src: travelBeach, alt: "Beach paradise", tall: true },
+  { src: travelHiker, alt: "Mountain hiking", tall: false },
+  { src: travelBoat, alt: "River boat journey", tall: true },
+  { src: travelKayak, alt: "Kayaking adventure", tall: true },
+  { src: travelSummit, alt: "Summit celebration", tall: false },
+  { src: travelOcean, alt: "Ocean seabirds", tall: true },
 ];
 
 export default function PhotoGallery() {
   return (
-    <section className="py-12 px-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+    <section className="py-10 px-6">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex gap-4 items-end justify-center">
           {photos.map((photo, i) => (
             <div
               key={i}
-              className={`rounded-2xl overflow-hidden ${
-                i % 3 === 0 ? "row-span-1 aspect-[3/4]" :
-                i % 3 === 1 ? "row-span-1 aspect-[3/4]" :
-                "row-span-1 aspect-[3/4]"
-              }`}
+              className="rounded-2xl overflow-hidden flex-shrink-0"
+              style={{
+                width: i === 3 ? "200px" : i === 0 ? "160px" : "140px",
+                height: photo.tall ? (i === 3 ? "280px" : "240px") : "180px",
+              }}
             >
               <img
                 src={photo.src}
