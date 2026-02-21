@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import TravelMemory from "@/components/TravelMemory";
 
 import destinationAgra from "@/assets/destination-agra.jpg";
 import destinationGoa from "@/assets/destination-goa.jpg";
@@ -441,6 +442,9 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* Travel Memory */}
+        <TravelMemory />
       </div>
     </div>
   );
