@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ChevronLeft, ChevronRight, MapPin, Clock, Utensils, Camera, ShoppingBag, Bus,
-  MessageSquare, Edit, Loader2, Brain, AlertTriangle, Send, RefreshCw, Zap, Map as MapIcon
+  MessageSquare, Edit, Loader2, Brain, AlertTriangle, Send, RefreshCw, Zap, Map as MapIcon,
+  Download
 } from "lucide-react";
 import { formatCurrency } from "@/lib/currency";
 import { useTrip, useTrips, useItineraries, useActivities } from "@/hooks/useTrips";
@@ -301,6 +302,37 @@ export default function Itinerary() {
             </p>
           </div>
           <div className="flex gap-2">
+            <button
+              onClick={() => {
+                // Download itinerary as text file
+                const lines: string[] = [];
+                lines.push(`${trip.name}`);
+                lines.push(`${trip.destination}${trip.country ? `, ${trip.country}` : ""}`);
+                lines.push(`Budget: ${formatCurrency(Number(trip.budget_total), trip.country)}`);
+                lines.push(`${new Date(trip.start_date).toLocaleDateString()} — ${new Date(trip.end_date).toLocaleDateString()}`);
+                lines.push("");
+                Object.entries(activityDays).forEach(([day, acts]) => {
+                  lines.push(`--- ${day} ---`);
+                  (acts as any[]).forEach(a => {
+                    const time = new Date(a.start_time).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+                    lines.push(`  ${time} | ${a.name}${a.location_name ? ` @ ${a.location_name}` : ""}${a.cost ? ` | ${formatCurrency(Number(a.cost), trip.country)}` : ""}`);
+                    if (a.notes) lines.push(`         💡 ${a.notes}`);
+                  });
+                  lines.push("");
+                });
+                const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = `${trip.name.replace(/\s+/g, "_")}_itinerary.txt`;
+                a.click(); URL.revokeObjectURL(url);
+                toast({ title: "Itinerary downloaded! 📥" });
+              }}
+              disabled={activities.length === 0}
+              className="px-4 py-2 rounded-xl bg-card border border-border text-sm font-medium text-muted-foreground hover:bg-secondary transition-colors shadow-card flex items-center gap-2 disabled:opacity-50"
+            >
+              <Download className="w-4 h-4" />
+              Download
+            </button>
             <button
               onClick={() => setShowChat(!showChat)}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors shadow-card flex items-center gap-2 ${
