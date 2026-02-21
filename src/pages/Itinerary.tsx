@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useQueryClient } from "@tanstack/react-query";
 import RegretPlanner from "@/components/RegretPlanner";
+import DisruptionReplanner from "@/components/DisruptionReplanner";
 
 const typeIcons: Record<string, React.ReactNode> = {
   food: <Utensils className="w-4 h-4" />,
@@ -326,6 +327,16 @@ export default function Itinerary() {
           budget={Number(trip.budget_total) || 30000}
           activeItineraryId={activeItinerary?.id}
           onPlanApplied={() => {
+            queryClient.invalidateQueries({ queryKey: ["itineraries", tripId] });
+            queryClient.invalidateQueries({ queryKey: ["activities"] });
+          }}
+        />
+
+        {/* Live Dynamic Replanning */}
+        <DisruptionReplanner
+          tripId={tripId!}
+          activeItineraryId={activeItinerary?.id}
+          onReplanApplied={() => {
             queryClient.invalidateQueries({ queryKey: ["itineraries", tripId] });
             queryClient.invalidateQueries({ queryKey: ["activities"] });
           }}
