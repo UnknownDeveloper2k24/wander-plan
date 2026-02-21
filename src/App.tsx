@@ -15,6 +15,7 @@ import Guide from "./pages/Guide";
 import Friends from "./pages/Friends";
 import Community from "./pages/Community";
 import JoinTrip from "./pages/JoinTrip";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
               <Route path="/guide" element={<Guide />} />
               <Route path="/friends" element={<Friends />} />
               <Route path="/community" element={<Community />} />
+              <Route path="/profile" element={<Profile />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

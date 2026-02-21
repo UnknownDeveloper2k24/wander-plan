@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation, Link } from "react-router-dom";
-import { LayoutDashboard, CalendarDays, Compass, BookOpen, Users, LogOut, Plus, MapPin, Globe } from "lucide-react";
+import { LayoutDashboard, CalendarDays, Compass, BookOpen, Users, LogOut, Plus, MapPin, Globe, UserCircle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTrips } from "@/hooks/useTrips";
 
@@ -14,6 +14,7 @@ const discoverItems = [
   { title: "Guide", url: "/guide", icon: BookOpen },
   { title: "Friends", url: "/friends", icon: Users },
   { title: "Community", url: "/community", icon: Globe },
+  { title: "Profile", url: "/profile", icon: UserCircle },
 ];
 
 export function AppSidebar() {

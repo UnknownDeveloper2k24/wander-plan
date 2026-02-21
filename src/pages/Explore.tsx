@@ -1,11 +1,12 @@
 import { useState, useRef, useCallback } from "react";
-import { Search, Star, Heart, MapPin, Loader2, X, Map, Eye, RotateCcw, Filter } from "lucide-react";
+import { Search, Star, Heart, MapPin, Loader2, X, Map, Eye, RotateCcw, Filter, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import WorldMap from "@/components/WorldMap";
 import Map3D from "@/components/Map3D";
 import ARViewer from "@/components/ARViewer";
 import StreetView360 from "@/components/StreetView360";
+import AddToTripButton from "@/components/AddToTripButton";
 
 import destinationAgra from "@/assets/destination-agra.jpg";
 import destinationGoa from "@/assets/destination-goa.jpg";
@@ -278,6 +279,14 @@ export default function Explore() {
                   )}
                   {/* Action buttons */}
                   <div className="flex gap-2 pt-2 flex-wrap">
+                    <AddToTripButton
+                      activity={{
+                        name: selectedPlace.name,
+                        description: selectedPlace.wikipedia_extracts?.text?.slice(0, 200),
+                        location_name: selectedPlace.address?.city || selectedPlace.name,
+                        category: selectedPlace.kinds?.split(",")[0]?.replace(/_/g, " ") || "attraction",
+                      }}
+                    />
                     <button
                       onClick={() => openAR(selectedPlace)}
                       className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
@@ -445,15 +454,23 @@ export default function Explore() {
                         <span className="text-xs font-semibold text-card-foreground">{starRating}/5</span>
                       </div>
                     )}
-                    {place.kinds && (
-                      <div className="flex gap-1.5 mt-3 flex-wrap">
-                        {place.kinds.split(",").slice(0, 3).map((tag: string) => (
+                    <div className="flex items-center justify-between mt-3">
+                      <div className="flex gap-1.5 flex-wrap flex-1">
+                        {place.kinds?.split(",").slice(0, 2).map((tag: string) => (
                           <span key={tag} className="px-2 py-0.5 rounded-full bg-secondary text-xs font-medium text-secondary-foreground capitalize">
                             {tag.replace(/_/g, " ")}
                           </span>
                         ))}
                       </div>
-                    )}
+                      <AddToTripButton
+                        activity={{
+                          name: place.name,
+                          description: place.wikipedia_extracts?.text?.slice(0, 200),
+                          location_name: place.address?.city || place.name,
+                          category: place.kinds?.split(",")[0]?.replace(/_/g, " ") || "attraction",
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
               );

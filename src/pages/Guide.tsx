@@ -2,6 +2,7 @@ import { Star, Bookmark, Search, MapPin, Loader2, ChevronRight, X, IndianRupee }
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import AddToTripButton from "@/components/AddToTripButton";
 
 import destinationAgra from "@/assets/destination-agra.jpg";
 import destinationGoa from "@/assets/destination-goa.jpg";
@@ -188,7 +189,16 @@ export default function Guide() {
                     {guide.cost > 0 && (
                       <span className="text-sm font-semibold text-card-foreground">₹{Number(guide.cost).toLocaleString("en-IN")}</span>
                     )}
-                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                    <AddToTripButton
+                      activity={{
+                        name: guide.title,
+                        description: guide.description,
+                        location_name: guide.location,
+                        category: guide.category || "attraction",
+                        cost: guide.cost,
+                        notes: guide.notes,
+                      }}
+                    />
                   </div>
                 </div>
               </div>
