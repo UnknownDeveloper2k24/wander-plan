@@ -1,4 +1,5 @@
-import { Search, Mic, MicOff, Plus, MapPin, Calendar, IndianRupee, Loader2, Users, User, Globe, Trash2 } from "lucide-react";
+import { Search, Mic, MicOff, Plus, MapPin, Calendar, Loader2, Users, User, Globe, Trash2 } from "lucide-react";
+import { formatCurrency } from "@/lib/currency";
 import { useAuth } from "@/hooks/useAuth";
 import { useTrips } from "@/hooks/useTrips";
 import { useState, useRef } from "react";
@@ -391,9 +392,8 @@ export default function Dashboard() {
                     </p>
                     <div className="flex items-center justify-between mt-3">
                       <div className="flex items-center gap-1">
-                        <IndianRupee className="w-3 h-3 text-muted-foreground" />
                         <span className="text-sm font-bold text-card-foreground">
-                          {Number(trip.budget_total).toLocaleString("en-IN")}
+                          {formatCurrency(Number(trip.budget_total), trip.country)}
                         </span>
                       </div>
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -424,8 +424,8 @@ export default function Dashboard() {
               <p className="text-xs text-muted-foreground mt-1">Upcoming</p>
             </div>
             <div className="text-center p-3 rounded-xl bg-warning/10">
-              <p className="text-2xl font-bold text-foreground">
-                ₹{trips.reduce((sum, t) => sum + Number(t.budget_total || 0), 0).toLocaleString("en-IN")}
+              <p className="text-lg font-bold text-foreground">
+                {trips.length > 0 ? formatCurrency(trips.reduce((sum, t) => sum + Number(t.budget_total || 0), 0), trips[0].country) : "$0"}
               </p>
               <p className="text-xs text-muted-foreground mt-1">Total Budget</p>
             </div>
@@ -450,7 +450,7 @@ export default function Dashboard() {
               <div className="grid grid-cols-3 gap-3">
                 <div className="text-center">
                   <p className="text-xs text-muted-foreground">Budget</p>
-                  <p className="text-sm font-bold text-card-foreground">₹{Number(upcomingTrips[0].budget_total).toLocaleString("en-IN")}</p>
+                  <p className="text-sm font-bold text-card-foreground">{formatCurrency(Number(upcomingTrips[0].budget_total), upcomingTrips[0].country)}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-muted-foreground">Days Left</p>

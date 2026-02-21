@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Search, Star, Heart, MapPin, Loader2, X, Map, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import MapplsMap from "@/components/MapplsMap";
+import WorldMap from "@/components/WorldMap";
 import ARViewer from "@/components/ARViewer";
 
 import destinationAgra from "@/assets/destination-agra.jpg";
@@ -242,7 +242,7 @@ export default function Explore() {
                 const coords = getPlaceCoords(selectedPlace);
                 return !isNaN(coords.lat) && !isNaN(coords.lng) ? (
                   <div className="w-full md:w-[300px] h-[250px] md:h-auto shrink-0 border-t md:border-t-0 md:border-l border-border">
-                    <MapplsMap
+                    <WorldMap
                       lat={coords.lat}
                       lng={coords.lng}
                       name={selectedPlace.name}

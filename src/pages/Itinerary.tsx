@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ChevronLeft, ChevronRight, MapPin, Clock, Utensils, Camera, ShoppingBag, Bus,
-  MessageSquare, Edit, IndianRupee, Loader2, Brain, AlertTriangle, Send, RefreshCw, Zap
+  MessageSquare, Edit, Loader2, Brain, AlertTriangle, Send, RefreshCw, Zap
 } from "lucide-react";
+import { formatCurrency } from "@/lib/currency";
 import { useTrip, useTrips, useItineraries, useActivities } from "@/hooks/useTrips";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -275,7 +276,7 @@ export default function Itinerary() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">{trip.name}</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {trip.destination} · Budget: ₹{Number(trip.budget_total).toLocaleString("en-IN")} · {trip.status}
+              {trip.destination} · Budget: {formatCurrency(Number(trip.budget_total), trip.country)} · {trip.status}
             </p>
           </div>
           <div className="flex gap-2">
@@ -316,9 +317,8 @@ export default function Itinerary() {
             </div>
             <div className="text-center">
               <p className="text-xs text-muted-foreground">Budget</p>
-              <p className="text-sm font-bold text-card-foreground flex items-center justify-center gap-0.5">
-                <IndianRupee className="w-3 h-3" />
-                {Number(trip.budget_total).toLocaleString("en-IN")}
+              <p className="text-sm font-bold text-card-foreground">
+                {formatCurrency(Number(trip.budget_total), trip.country)}
               </p>
             </div>
             <div className="text-center">
@@ -343,9 +343,8 @@ export default function Itinerary() {
               </div>
               {activeItinerary.cost_breakdown && (
                 <div className="flex items-center gap-2">
-                  <IndianRupee className="w-4 h-4 text-success" />
                   <span className="text-xs text-muted-foreground">Est. Cost:</span>
-                  <span className="text-sm font-bold text-success">₹{Number((activeItinerary.cost_breakdown as any)?.total || 0).toLocaleString("en-IN")}</span>
+                  <span className="text-sm font-bold text-success">{formatCurrency(Number((activeItinerary.cost_breakdown as any)?.total || 0), trip.country)}</span>
                 </div>
               )}
             </div>
@@ -465,9 +464,8 @@ export default function Itinerary() {
                               </span>
                             )}
                             {activity.cost != null && Number(activity.cost) > 0 && (
-                              <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
-                                <IndianRupee className="w-3 h-3" />
-                                {Number(activity.cost).toLocaleString("en-IN")}
+                              <span className="text-xs text-muted-foreground">
+                                {formatCurrency(Number(activity.cost), trip.country)}
                               </span>
                             )}
                             {activity.review_score && (
