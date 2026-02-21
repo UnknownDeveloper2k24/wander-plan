@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { Search, Star, Heart, MapPin, Loader2, X, Map, Eye } from "lucide-react";
+import { Search, Star, Heart, MapPin, Loader2, X, Map, Eye, RotateCcw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import WorldMap from "@/components/WorldMap";
+import Map3D from "@/components/Map3D";
 import ARViewer from "@/components/ARViewer";
+import StreetView360 from "@/components/StreetView360";
 
 import destinationAgra from "@/assets/destination-agra.jpg";
 import destinationGoa from "@/assets/destination-goa.jpg";
@@ -24,7 +26,9 @@ export default function Explore() {
   const [searched, setSearched] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<any | null>(null);
   const [showMap, setShowMap] = useState(false);
+  const [mapMode, setMapMode] = useState<"2d" | "3d">("2d");
   const [arPlace, setArPlace] = useState<any | null>(null);
+  const [streetViewPlace, setStreetViewPlace] = useState<any | null>(null);
   const { toast } = useToast();
 
   const handleSearch = async (filterOverride?: string) => {
@@ -175,20 +179,30 @@ export default function Explore() {
         />
       )}
 
+      {/* 360° Street View */}
+      {streetViewPlace && (
+        <StreetView360
+          lat={streetViewPlace.lat}
+          lng={streetViewPlace.lng}
+          name={streetViewPlace.name}
+          onClose={() => setStreetViewPlace(null)}
+        />
+      )}
+
       {/* Detail Modal with Map */}
       {selectedPlace && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6" onClick={() => { setSelectedPlace(null); setShowMap(false); }}>
-          <div className="bg-card rounded-2xl max-w-2xl w-full overflow-hidden shadow-elevated animate-fade-in" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6" onClick={() => { setSelectedPlace(null); setShowMap(false); setMapMode("2d"); }}>
+          <div className="bg-card rounded-2xl max-w-3xl w-full overflow-hidden shadow-elevated animate-fade-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex flex-col md:flex-row">
               {/* Left: Image + Details */}
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <div className="relative h-48">
                   <img
                     src={selectedPlace.preview?.source || fallbackImages[0]}
                     alt={selectedPlace.name}
                     className="w-full h-full object-cover"
                   />
-                  <button onClick={() => { setSelectedPlace(null); setShowMap(false); }} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
+                  <button onClick={() => { setSelectedPlace(null); setShowMap(false); setMapMode("2d"); }} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
                     <X className="w-4 h-4 text-foreground" />
                   </button>
                 </div>
@@ -217,19 +231,33 @@ export default function Explore() {
                     </div>
                   )}
                   {selectedPlace.wikipedia_extracts?.text && (
-                    <p className="text-sm text-muted-foreground leading-relaxed line-clamp-4">{selectedPlace.wikipedia_extracts.text}</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3">{selectedPlace.wikipedia_extracts.text}</p>
                   )}
                   {/* Action buttons */}
-                  <div className="flex gap-2 pt-2">
+                  <div className="flex gap-2 pt-2 flex-wrap">
                     <button
                       onClick={() => openAR(selectedPlace)}
-                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
                     >
-                      <Eye className="w-4 h-4" />
-                      AR/VR View
+                      <Eye className="w-3.5 h-3.5" />
+                      AR View
+                    </button>
+                    <button
+                      onClick={() => {
+                        const coords = getPlaceCoords(selectedPlace);
+                        if (!isNaN(coords.lat) && !isNaN(coords.lng)) {
+                          setStreetViewPlace({ ...selectedPlace, lat: coords.lat, lng: coords.lng });
+                        } else {
+                          toast({ title: "No coordinates", description: "360° view unavailable for this location.", variant: "destructive" });
+                        }
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl bg-accent text-accent-foreground text-xs font-medium hover:opacity-90 transition-opacity"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      360° View
                     </button>
                     {selectedPlace.url && (
-                      <a href={selectedPlace.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors">
+                      <a href={selectedPlace.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-secondary text-secondary-foreground text-xs font-medium hover:bg-secondary/80 transition-colors">
                         Learn more →
                       </a>
                     )}
@@ -237,18 +265,57 @@ export default function Explore() {
                 </div>
               </div>
 
-              {/* Right: Map */}
+              {/* Right: Map with 2D/3D toggle */}
               {showMap && (() => {
                 const coords = getPlaceCoords(selectedPlace);
                 return !isNaN(coords.lat) && !isNaN(coords.lng) ? (
-                  <div className="w-full md:w-[300px] h-[250px] md:h-auto shrink-0 border-t md:border-t-0 md:border-l border-border">
-                    <WorldMap
-                      lat={coords.lat}
-                      lng={coords.lng}
-                      name={selectedPlace.name}
-                      zoom={15}
-                      className="w-full h-full min-h-[250px]"
-                    />
+                  <div className="w-full md:w-[340px] h-[300px] md:h-auto shrink-0 border-t md:border-t-0 md:border-l border-border flex flex-col">
+                    {/* 2D/3D Toggle */}
+                    <div className="flex items-center justify-between px-3 py-2 bg-secondary/50 border-b border-border">
+                      <span className="text-xs font-medium text-muted-foreground">Map View</span>
+                      <div className="flex bg-card rounded-lg border border-border overflow-hidden">
+                        <button
+                          onClick={() => setMapMode("2d")}
+                          className={`px-3 py-1 text-xs font-semibold transition-colors ${
+                            mapMode === "2d"
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          2D
+                        </button>
+                        <button
+                          onClick={() => setMapMode("3d")}
+                          className={`px-3 py-1 text-xs font-semibold transition-colors ${
+                            mapMode === "3d"
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          3D
+                        </button>
+                      </div>
+                    </div>
+                    {/* Map */}
+                    <div className="flex-1 min-h-[250px]">
+                      {mapMode === "2d" ? (
+                        <WorldMap
+                          lat={coords.lat}
+                          lng={coords.lng}
+                          name={selectedPlace.name}
+                          zoom={15}
+                          className="w-full h-full"
+                        />
+                      ) : (
+                        <Map3D
+                          lat={coords.lat}
+                          lng={coords.lng}
+                          name={selectedPlace.name}
+                          zoom={15}
+                          className="w-full h-full"
+                        />
+                      )}
+                    </div>
                   </div>
                 ) : null;
               })()}
