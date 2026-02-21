@@ -12,7 +12,7 @@ import travelKayak from "@/assets/travel-kayak.jpg";
 
 const fallbackImages = [destinationAgra, destinationGoa, destinationKerala, travelBeach, travelBoat, travelKayak];
 
-const categories = ["All", "Cultural", "Natural", "Historic", "Architecture", "Religion", "Urban"];
+const categories = ["All", "Cultural", "Natural", "Historic", "Architecture", "Religion"];
 
 export default function Explore() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -56,21 +56,23 @@ export default function Explore() {
         ? raw.features.map((f: any) => ({ ...f.properties, point: f.geometry }))
         : Array.isArray(raw) ? raw : [];
 
-      const detailed = await Promise.all(
-        items.slice(0, 12).map(async (p: any) => {
-          if (!p.xid) return null;
-          try {
-            const detailRes = await supabase.functions.invoke("opentripmap", {
-              body: { action: "details", xid: p.xid },
-            });
-            return detailRes.data;
-          } catch {
-            return { ...p, name: p.name || "Unknown Place" };
-          }
-        })
-      );
+      // Fetch details sequentially with delay to avoid rate limiting
+      const detailed: any[] = [];
+      for (const p of items.slice(0, 8)) {
+        if (!p.xid) continue;
+        try {
+          const detailRes = await supabase.functions.invoke("opentripmap", {
+            body: { action: "details", xid: p.xid },
+          });
+          if (detailRes.data) detailed.push(detailRes.data);
+          // Small delay to avoid 429
+          await new Promise(r => setTimeout(r, 250));
+        } catch {
+          detailed.push({ ...p, name: p.name || "Unknown Place" });
+        }
+      }
 
-      const results = detailed.filter(Boolean).filter((p: any) => p.name && p.name.trim() !== "");
+      const results = detailed.filter((p: any) => p.name && p.name.trim() !== "");
       setPlaces(results);
 
       if (results.length === 0) {
