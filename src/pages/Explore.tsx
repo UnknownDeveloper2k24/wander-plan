@@ -3,6 +3,15 @@ import { Search, Star, Heart, MapPin, Filter, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
+import destinationAgra from "@/assets/destination-agra.jpg";
+import destinationGoa from "@/assets/destination-goa.jpg";
+import destinationKerala from "@/assets/destination-kerala.jpg";
+import travelBeach from "@/assets/travel-beach.jpg";
+import travelBoat from "@/assets/travel-boat.jpg";
+import travelKayak from "@/assets/travel-kayak.jpg";
+
+const fallbackImages = [destinationAgra, destinationGoa, destinationKerala, travelBeach, travelBoat, travelKayak];
+
 const categories = ["All", "Cultural", "Natural", "Historic", "Architecture", "Religion", "Urban"];
 
 export default function Explore() {
@@ -19,7 +28,6 @@ export default function Explore() {
     setSearched(true);
 
     try {
-      // First geocode the location using Nominatim
       const geoRes = await supabase.functions.invoke("nominatim", {
         body: { action: "search", query: searchQuery, limit: 1 },
       });
@@ -33,16 +41,20 @@ export default function Explore() {
 
       const { lat, lon } = geoRes.data[0];
 
-      // Then find places nearby using OpenTripMap
       const kinds = activeFilter === "All" ? "interesting_places" : activeFilter.toLowerCase();
       const placesRes = await supabase.functions.invoke("opentripmap", {
-        body: { action: "radius", lat: parseFloat(lat), lon: parseFloat(lon), radius: 10000, kinds, limit: 20 },
+        body: { action: "radius", lat: parseFloat(lat), lon: parseFloat(lon), radius: 10000, kinds, limit: 30 },
       });
 
       if (placesRes.error) throw new Error(placesRes.error.message);
 
-      const items = Array.isArray(placesRes.data) ? placesRes.data : [];
-      // Fetch details for top items
+      // Handle GeoJSON FeatureCollection format
+      const raw = placesRes.data;
+      const items = raw?.features
+        ? raw.features.map((f: any) => ({ ...f.properties, point: f.geometry }))
+        : Array.isArray(raw) ? raw : [];
+
+      // Fetch details for items that have xid
       const detailed = await Promise.all(
         items.slice(0, 12).map(async (p: any) => {
           if (!p.xid) return null;
@@ -52,12 +64,17 @@ export default function Explore() {
             });
             return detailRes.data;
           } catch {
-            return p;
+            return { ...p, name: p.name || "Unknown Place" };
           }
         })
       );
 
-      setPlaces(detailed.filter(Boolean).filter((p: any) => p.name));
+      const results = detailed.filter(Boolean).filter((p: any) => p.name && p.name.trim() !== "");
+      setPlaces(results);
+
+      if (results.length === 0) {
+        toast({ title: "No named places found", description: "Try a broader search or different category." });
+      }
     } catch (error: any) {
       toast({ title: "Search failed", description: error.message, variant: "destructive" });
     } finally {
@@ -69,7 +86,7 @@ export default function Explore() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Explore India</h1>
+          <h1 className="text-2xl font-bold text-foreground">Explore Destinations</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Discover amazing places for your next adventure
           </p>
@@ -148,9 +165,11 @@ export default function Explore() {
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <MapPin className="w-10 h-10 text-primary/20" />
-                  </div>
+                  <img
+                    src={fallbackImages[i % fallbackImages.length]}
+                    alt={place.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
                 )}
                 <button className="absolute top-3 right-3 w-8 h-8 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center hover:bg-card transition-colors">
                   <Heart className="w-4 h-4 text-primary" />
@@ -166,7 +185,7 @@ export default function Explore() {
                     </span>
                   </div>
                 )}
-                {place.rate && (
+                {place.rate > 0 && (
                   <div className="flex items-center gap-1 mt-2">
                     <Star className="w-3 h-3 text-warning fill-warning" />
                     <span className="text-xs font-semibold text-card-foreground">{place.rate}</span>

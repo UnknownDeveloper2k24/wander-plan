@@ -1,13 +1,23 @@
-import { Star, Bookmark, Search, MapPin, Loader2 } from "lucide-react";
+import { Star, Bookmark, Search, MapPin, Loader2, ChevronRight, X, IndianRupee } from "lucide-react";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+
+import destinationAgra from "@/assets/destination-agra.jpg";
+import destinationGoa from "@/assets/destination-goa.jpg";
+import destinationKerala from "@/assets/destination-kerala.jpg";
+import travelSummit from "@/assets/travel-summit.jpg";
+import travelKayak from "@/assets/travel-kayak.jpg";
+import travelBeach from "@/assets/travel-beach.jpg";
+
+const guideImages = [destinationAgra, destinationGoa, destinationKerala, travelSummit, travelKayak, travelBeach];
 
 export default function Guide() {
   const [searchQuery, setSearchQuery] = useState("");
   const [guides, setGuides] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [selectedGuide, setSelectedGuide] = useState<any | null>(null);
   const { toast } = useToast();
 
   const handleSearch = async () => {
@@ -16,7 +26,6 @@ export default function Guide() {
     setSearched(true);
 
     try {
-      // Use AI to generate travel guides for the destination
       const res = await supabase.functions.invoke("ai-planner", {
         body: {
           action: "plan-itinerary",
@@ -31,7 +40,6 @@ export default function Guide() {
 
       if (res.error) throw new Error(res.error.message);
 
-      // Transform activities into guide-like cards
       const activities = res.data?.activities || [];
       const guideCards = activities.slice(0, 6).map((a: any, i: number) => ({
         id: i,
@@ -41,6 +49,11 @@ export default function Guide() {
         category: a.category,
         cost: a.cost,
         rating: a.review_score || 4.5,
+        notes: a.notes,
+        start_time: a.start_time,
+        end_time: a.end_time,
+        estimated_steps: a.estimated_steps,
+        image: guideImages[i % guideImages.length],
       }));
 
       setGuides(guideCards);
@@ -57,7 +70,7 @@ export default function Guide() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">AI Travel Guide</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Get AI-curated travel recommendations for any Indian destination
+            Get AI-curated travel recommendations for any destination
           </p>
         </div>
       </div>
@@ -84,6 +97,40 @@ export default function Guide() {
         </button>
       </div>
 
+      {/* Detail Modal */}
+      {selectedGuide && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6" onClick={() => setSelectedGuide(null)}>
+          <div className="bg-card rounded-2xl max-w-lg w-full overflow-hidden shadow-elevated animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="relative h-48">
+              <img src={selectedGuide.image} alt={selectedGuide.title} className="w-full h-full object-cover" />
+              <button onClick={() => setSelectedGuide(null)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
+                <X className="w-4 h-4 text-foreground" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <h2 className="text-lg font-bold text-card-foreground">{selectedGuide.title}</h2>
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="w-3 h-3" />{selectedGuide.location}</span>
+                <span className="flex items-center gap-1 text-xs text-warning font-semibold"><Star className="w-3 h-3 fill-warning" />{selectedGuide.rating}</span>
+                {selectedGuide.cost > 0 && (
+                  <span className="flex items-center gap-0.5 text-xs font-semibold text-card-foreground"><IndianRupee className="w-3 h-3" />{Number(selectedGuide.cost).toLocaleString("en-IN")}</span>
+                )}
+              </div>
+              <span className="inline-block px-3 py-1 rounded-full bg-secondary text-xs font-medium text-secondary-foreground capitalize">{selectedGuide.category || "general"}</span>
+              {selectedGuide.description && <p className="text-sm text-muted-foreground">{selectedGuide.description}</p>}
+              {selectedGuide.notes && (
+                <div className="bg-secondary/50 rounded-xl p-3">
+                  <p className="text-xs text-muted-foreground">💡 {selectedGuide.notes}</p>
+                </div>
+              )}
+              {selectedGuide.estimated_steps && (
+                <p className="text-xs text-muted-foreground">🚶 Estimated steps: {selectedGuide.estimated_steps.toLocaleString()}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {!searched ? (
         <div className="text-center py-20">
           <Bookmark className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
@@ -106,31 +153,44 @@ export default function Guide() {
           {guides.map((guide) => (
             <div
               key={guide.id}
-              className="bg-card rounded-2xl p-5 shadow-card hover:shadow-elevated transition-all cursor-pointer animate-fade-in"
+              onClick={() => setSelectedGuide(guide)}
+              className="bg-card rounded-2xl overflow-hidden shadow-card hover:shadow-elevated transition-all cursor-pointer group animate-fade-in"
             >
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="font-semibold text-card-foreground">{guide.title}</h3>
-                  <div className="flex items-center gap-1 mt-1">
-                    <MapPin className="w-3 h-3 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">{guide.location}</span>
+              <div className="relative h-36 overflow-hidden">
+                <img
+                  src={guide.image}
+                  alt={guide.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+              </div>
+              <div className="p-4">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <h3 className="font-semibold text-card-foreground">{guide.title}</h3>
+                    <div className="flex items-center gap-1 mt-1">
+                      <MapPin className="w-3 h-3 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">{guide.location}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Star className="w-3 h-3 text-warning fill-warning" />
+                    <span className="text-xs font-semibold">{guide.rating}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Star className="w-3 h-3 text-warning fill-warning" />
-                  <span className="text-xs font-semibold">{guide.rating}</span>
-                </div>
-              </div>
-              {guide.description && (
-                <p className="text-sm text-muted-foreground mb-3">{guide.description}</p>
-              )}
-              <div className="flex items-center justify-between">
-                <span className="px-3 py-1 rounded-full bg-secondary text-xs font-medium text-secondary-foreground capitalize">
-                  {guide.category || "general"}
-                </span>
-                {guide.cost > 0 && (
-                  <span className="text-sm font-semibold text-card-foreground">₹{guide.cost.toLocaleString("en-IN")}</span>
+                {guide.description && (
+                  <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{guide.description}</p>
                 )}
+                <div className="flex items-center justify-between">
+                  <span className="px-3 py-1 rounded-full bg-secondary text-xs font-medium text-secondary-foreground capitalize">
+                    {guide.category || "general"}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {guide.cost > 0 && (
+                      <span className="text-sm font-semibold text-card-foreground">₹{Number(guide.cost).toLocaleString("en-IN")}</span>
+                    )}
+                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  </div>
+                </div>
               </div>
             </div>
           ))}
