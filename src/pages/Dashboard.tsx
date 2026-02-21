@@ -1,14 +1,18 @@
-import { Search, Mic, Star, Heart, ExternalLink, Plus, MapPin, Calendar, IndianRupee } from "lucide-react";
+import { Search, Mic, MicOff, Plus, MapPin, Calendar, IndianRupee, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTrips } from "@/hooks/useTrips";
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function Dashboard() {
   const { user } = useAuth();
   const { data: trips = [], isLoading } = useTrips();
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [showNewTrip, setShowNewTrip] = useState(false);
   const [newTrip, setNewTrip] = useState({
     name: "",
@@ -19,6 +23,11 @@ export default function Dashboard() {
     budget_total: "",
   });
   const [creating, setCreating] = useState(false);
+
+  // Voice planning state
+  const [isListening, setIsListening] = useState(false);
+  const [voiceProcessing, setVoiceProcessing] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   const userName = user?.user_metadata?.name || user?.email?.split("@")[0] || "Traveler";
 
@@ -39,13 +48,77 @@ export default function Dashboard() {
       toast({ title: "Trip created!", description: `${newTrip.destination} trip is ready.` });
       setShowNewTrip(false);
       setNewTrip({ name: "", destination: "", country: "India", start_date: "", end_date: "", budget_total: "" });
-      // Refetch handled by react-query
-      window.location.reload();
+      queryClient.invalidateQueries({ queryKey: ["trips"] });
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
       setCreating(false);
     }
+  };
+
+  // Voice-First Planning: Web Speech API → AI Intent Extraction → Pre-fill form
+  const startVoiceCapture = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast({ title: "Not supported", description: "Speech recognition is not supported in this browser.", variant: "destructive" });
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-IN";
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => {
+      setIsListening(false);
+      toast({ title: "Voice error", description: "Could not capture voice. Please try again.", variant: "destructive" });
+    };
+
+    recognition.onresult = async (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setIsListening(false);
+      setVoiceProcessing(true);
+      toast({ title: "Processing voice...", description: `"${transcript}"` });
+
+      try {
+        const res = await supabase.functions.invoke("ai-planner", {
+          body: { action: "extract-intent", transcript },
+        });
+        if (res.error) throw new Error(res.error.message);
+        const intent = res.data;
+
+        // Pre-fill form with extracted intent
+        const today = new Date();
+        const startDate = intent.start_date || today.toISOString().split("T")[0];
+        const days = intent.duration_days || 3;
+        const endDate = new Date(new Date(startDate).getTime() + days * 86400000).toISOString().split("T")[0];
+
+        setNewTrip({
+          name: intent.destination ? `${intent.trip_type || "Trip"} to ${intent.destination}` : "My Trip",
+          destination: intent.destination || "",
+          country: "India",
+          start_date: startDate,
+          end_date: endDate,
+          budget_total: intent.budget_range?.max?.toString() || "",
+        });
+        setShowNewTrip(true);
+        toast({ title: "Voice captured!", description: `Destination: ${intent.destination || "Not detected"}. Review and confirm.` });
+      } catch (error: any) {
+        toast({ title: "AI Error", description: error.message, variant: "destructive" });
+      } finally {
+        setVoiceProcessing(false);
+      }
+    };
+
+    recognition.start();
+  };
+
+  const stopVoiceCapture = () => {
+    recognitionRef.current?.stop();
+    setIsListening(false);
   };
 
   const upcomingTrips = trips.filter(
@@ -77,11 +150,34 @@ export default function Dashboard() {
                 className="pl-10 pr-4 py-2.5 rounded-xl bg-card border border-border text-sm w-64 focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-card"
               />
             </div>
-            <button className="p-2.5 rounded-xl bg-card border border-border hover:bg-secondary transition-colors shadow-card">
-              <Mic className="w-4 h-4 text-muted-foreground" />
+            <button
+              onClick={isListening ? stopVoiceCapture : startVoiceCapture}
+              disabled={voiceProcessing}
+              className={`p-2.5 rounded-xl border transition-colors shadow-card flex items-center gap-2 ${
+                isListening
+                  ? "bg-destructive text-destructive-foreground border-destructive animate-pulse"
+                  : voiceProcessing
+                  ? "bg-primary/10 border-primary text-primary"
+                  : "bg-card border-border hover:bg-secondary text-muted-foreground"
+              }`}
+            >
+              {voiceProcessing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : isListening ? (
+                <MicOff className="w-4 h-4" />
+              ) : (
+                <Mic className="w-4 h-4" />
+              )}
             </button>
           </div>
         </div>
+
+        {isListening && (
+          <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4 flex items-center gap-3 animate-fade-in">
+            <div className="w-3 h-3 bg-destructive rounded-full animate-pulse" />
+            <p className="text-sm text-foreground font-medium">Listening... Speak your travel plan (e.g., "Plan a 5-day trip to Goa for 4 people with ₹50,000 budget")</p>
+          </div>
+        )}
 
         {/* New Trip Button */}
         <button
@@ -94,7 +190,7 @@ export default function Dashboard() {
 
         {/* New Trip Form */}
         {showNewTrip && (
-          <form onSubmit={handleCreateTrip} className="bg-card rounded-2xl p-5 shadow-card space-y-4">
+          <form onSubmit={handleCreateTrip} className="bg-card rounded-2xl p-5 shadow-card space-y-4 animate-fade-in">
             <h3 className="font-semibold text-card-foreground">New Trip</h3>
             <div className="grid grid-cols-2 gap-4">
               <input
@@ -158,7 +254,7 @@ export default function Dashboard() {
           </form>
         )}
 
-        {/* Upcoming Trips */}
+        {/* Trips */}
         <div>
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -184,6 +280,7 @@ export default function Dashboard() {
               {trips.map((trip) => (
                 <div
                   key={trip.id}
+                  onClick={() => navigate(`/itinerary/${trip.id}`)}
                   className="bg-card rounded-2xl overflow-hidden shadow-card hover:shadow-elevated transition-shadow cursor-pointer group"
                 >
                   <div className="relative h-32 overflow-hidden bg-primary/10">
