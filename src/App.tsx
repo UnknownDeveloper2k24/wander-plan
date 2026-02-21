@@ -13,6 +13,8 @@ import Itinerary from "./pages/Itinerary";
 import Explore from "./pages/Explore";
 import Guide from "./pages/Guide";
 import Friends from "./pages/Friends";
+import Community from "./pages/Community";
+import JoinTrip from "./pages/JoinTrip";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +29,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/join/:inviteCode" element={<JoinTrip />} />
             <Route element={<ProtectedLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/itinerary" element={<Itinerary />} />
@@ -34,6 +37,7 @@ const App = () => (
               <Route path="/explore" element={<Explore />} />
               <Route path="/guide" element={<Guide />} />
               <Route path="/friends" element={<Friends />} />
+              <Route path="/community" element={<Community />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
