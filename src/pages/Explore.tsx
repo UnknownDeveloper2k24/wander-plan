@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Star, Heart, MapPin, Filter, Loader2 } from "lucide-react";
+import { Search, Star, Heart, MapPin, Loader2, X, IndianRupee } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -20,12 +20,15 @@ export default function Explore() {
   const [places, setPlaces] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [selectedPlace, setSelectedPlace] = useState<any | null>(null);
   const { toast } = useToast();
 
-  const handleSearch = async () => {
+  const handleSearch = async (filterOverride?: string) => {
     if (!searchQuery.trim()) return;
     setLoading(true);
     setSearched(true);
+
+    const currentFilter = filterOverride || activeFilter;
 
     try {
       const geoRes = await supabase.functions.invoke("nominatim", {
@@ -41,20 +44,18 @@ export default function Explore() {
 
       const { lat, lon } = geoRes.data[0];
 
-      const kinds = activeFilter === "All" ? "interesting_places" : activeFilter.toLowerCase();
+      const kinds = currentFilter === "All" ? "interesting_places" : currentFilter.toLowerCase();
       const placesRes = await supabase.functions.invoke("opentripmap", {
         body: { action: "radius", lat: parseFloat(lat), lon: parseFloat(lon), radius: 10000, kinds, limit: 30 },
       });
 
       if (placesRes.error) throw new Error(placesRes.error.message);
 
-      // Handle GeoJSON FeatureCollection format
       const raw = placesRes.data;
       const items = raw?.features
         ? raw.features.map((f: any) => ({ ...f.properties, point: f.geometry }))
         : Array.isArray(raw) ? raw : [];
 
-      // Fetch details for items that have xid
       const detailed = await Promise.all(
         items.slice(0, 12).map(async (p: any) => {
           if (!p.xid) return null;
@@ -82,14 +83,19 @@ export default function Explore() {
     }
   };
 
+  const handleFilterChange = (filter: string) => {
+    setActiveFilter(filter);
+    if (searched && searchQuery.trim()) {
+      handleSearch(filter);
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Explore Destinations</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Discover amazing places for your next adventure
-          </p>
+          <p className="text-sm text-muted-foreground mt-1">Discover amazing places for your next adventure</p>
         </div>
       </div>
 
@@ -107,7 +113,7 @@ export default function Explore() {
           />
         </div>
         <button
-          onClick={handleSearch}
+          onClick={() => handleSearch()}
           disabled={loading}
           className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50"
         >
@@ -120,7 +126,7 @@ export default function Explore() {
         {categories.map((f) => (
           <button
             key={f}
-            onClick={() => setActiveFilter(f)}
+            onClick={() => handleFilterChange(f)}
             className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
               activeFilter === f
                 ? "bg-primary text-primary-foreground"
@@ -131,6 +137,57 @@ export default function Explore() {
           </button>
         ))}
       </div>
+
+      {/* Detail Modal */}
+      {selectedPlace && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6" onClick={() => setSelectedPlace(null)}>
+          <div className="bg-card rounded-2xl max-w-lg w-full overflow-hidden shadow-elevated animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="relative h-48">
+              <img
+                src={selectedPlace.preview?.source || fallbackImages[0]}
+                alt={selectedPlace.name}
+                className="w-full h-full object-cover"
+              />
+              <button onClick={() => setSelectedPlace(null)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
+                <X className="w-4 h-4 text-foreground" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <h2 className="text-lg font-bold text-card-foreground">{selectedPlace.name}</h2>
+              <div className="flex items-center gap-3 flex-wrap">
+                {selectedPlace.address?.city && (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <MapPin className="w-3 h-3" />
+                    {[selectedPlace.address.city, selectedPlace.address.state, selectedPlace.address.country].filter(Boolean).join(", ")}
+                  </span>
+                )}
+                {selectedPlace.rate > 0 && (
+                  <span className="flex items-center gap-1 text-xs text-warning font-semibold">
+                    <Star className="w-3 h-3 fill-warning" />{selectedPlace.rate}/7
+                  </span>
+                )}
+              </div>
+              {selectedPlace.kinds && (
+                <div className="flex gap-1.5 flex-wrap">
+                  {selectedPlace.kinds.split(",").slice(0, 5).map((tag: string) => (
+                    <span key={tag} className="px-2 py-0.5 rounded-full bg-secondary text-xs font-medium text-secondary-foreground capitalize">
+                      {tag.replace(/_/g, " ")}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {selectedPlace.wikipedia_extracts?.text && (
+                <p className="text-sm text-muted-foreground leading-relaxed">{selectedPlace.wikipedia_extracts.text}</p>
+              )}
+              {selectedPlace.url && (
+                <a href={selectedPlace.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+                  Learn more →
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Results */}
       {!searched ? (
@@ -154,24 +211,20 @@ export default function Explore() {
           {places.map((place, i) => (
             <div
               key={place.xid || i}
+              onClick={() => setSelectedPlace(place)}
               className="bg-card rounded-2xl overflow-hidden shadow-card hover:shadow-elevated transition-all cursor-pointer group animate-fade-in"
               style={{ animationDelay: `${i * 0.05}s` }}
             >
               <div className="relative h-44 overflow-hidden bg-primary/5">
-                {place.preview?.source ? (
-                  <img
-                    src={place.preview.source}
-                    alt={place.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                ) : (
-                  <img
-                    src={fallbackImages[i % fallbackImages.length]}
-                    alt={place.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                )}
-                <button className="absolute top-3 right-3 w-8 h-8 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center hover:bg-card transition-colors">
+                <img
+                  src={place.preview?.source || fallbackImages[i % fallbackImages.length]}
+                  alt={place.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+                <button
+                  onClick={(e) => { e.stopPropagation(); }}
+                  className="absolute top-3 right-3 w-8 h-8 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center hover:bg-card transition-colors"
+                >
                   <Heart className="w-4 h-4 text-primary" />
                 </button>
               </div>
@@ -194,10 +247,7 @@ export default function Explore() {
                 {place.kinds && (
                   <div className="flex gap-1.5 mt-3 flex-wrap">
                     {place.kinds.split(",").slice(0, 3).map((tag: string) => (
-                      <span
-                        key={tag}
-                        className="px-2 py-0.5 rounded-full bg-secondary text-xs font-medium text-secondary-foreground capitalize"
-                      >
+                      <span key={tag} className="px-2 py-0.5 rounded-full bg-secondary text-xs font-medium text-secondary-foreground capitalize">
                         {tag.replace(/_/g, " ")}
                       </span>
                     ))}

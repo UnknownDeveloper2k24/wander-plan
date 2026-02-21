@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { AppSidebar } from "./AppSidebar";
+import AIAssistant from "./AIAssistant";
 
 export function ProtectedLayout() {
   const { user, loading } = useAuth();
@@ -23,6 +24,7 @@ export function ProtectedLayout() {
       <main className="flex-1 overflow-auto">
         <Outlet />
       </main>
+      <AIAssistant />
     </div>
   );
 }
