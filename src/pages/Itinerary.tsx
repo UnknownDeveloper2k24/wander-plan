@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   ChevronLeft, ChevronRight, MapPin, Clock, Utensils, Camera, ShoppingBag, Bus,
   MessageSquare, Edit, IndianRupee, Loader2, Brain, AlertTriangle, Send, RefreshCw, Zap
 } from "lucide-react";
-import { useTrip, useItineraries, useActivities } from "@/hooks/useTrips";
+import { useTrip, useTrips, useItineraries, useActivities } from "@/hooks/useTrips";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -29,13 +29,22 @@ const typeColors: Record<string, string> = {
 
 export default function Itinerary() {
   const { tripId } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
+  const { data: trips = [] } = useTrips();
   const { data: trip } = useTrip(tripId);
   const { data: itineraries = [] } = useItineraries(tripId);
   const activeItinerary = itineraries[0];
   const { data: activities = [] } = useActivities(activeItinerary?.id);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Auto-redirect to first trip if no tripId
+  useEffect(() => {
+    if (!tripId && trips.length > 0) {
+      navigate(`/itinerary/${trips[0].id}`, { replace: true });
+    }
+  }, [tripId, trips, navigate]);
 
   const [generating, setGenerating] = useState(false);
   const [showChat, setShowChat] = useState(false);
@@ -217,8 +226,31 @@ export default function Itinerary() {
       <div className="p-6 max-w-4xl mx-auto">
         <div className="text-center py-20">
           <MapPin className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-foreground mb-2">Select a Trip</h1>
-          <p className="text-muted-foreground">Choose a trip from the sidebar or create a new one from the dashboard.</p>
+          <h1 className="text-2xl font-bold text-foreground mb-2">
+            {trips.length === 0 ? "No Trips Yet" : "Select a Trip"}
+          </h1>
+          <p className="text-muted-foreground mb-6">
+            {trips.length === 0
+              ? "Create your first trip from the dashboard to get started."
+              : "Choose a trip below or from the sidebar."}
+          </p>
+          {trips.length > 0 && (
+            <div className="grid gap-3 max-w-md mx-auto">
+              {trips.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => navigate(`/itinerary/${t.id}`)}
+                  className="flex items-center gap-3 p-4 rounded-xl bg-card border border-border hover:bg-secondary transition-colors text-left shadow-card"
+                >
+                  <MapPin className="w-5 h-5 text-primary shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-card-foreground">{t.name}</p>
+                    <p className="text-xs text-muted-foreground">{t.destination}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );
