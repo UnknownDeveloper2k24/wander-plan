@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Search, Star, Heart, MapPin, Loader2, X, IndianRupee } from "lucide-react";
+import { Search, Star, Heart, MapPin, Loader2, X, Map, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import MapplsMap from "@/components/MapplsMap";
+import ARViewer from "@/components/ARViewer";
 
 import destinationAgra from "@/assets/destination-agra.jpg";
 import destinationGoa from "@/assets/destination-goa.jpg";
@@ -21,6 +23,8 @@ export default function Explore() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<any | null>(null);
+  const [showMap, setShowMap] = useState(false);
+  const [arPlace, setArPlace] = useState<any | null>(null);
   const { toast } = useToast();
 
   const handleSearch = async (filterOverride?: string) => {
@@ -65,7 +69,6 @@ export default function Explore() {
             body: { action: "details", xid: p.xid },
           });
           if (detailRes.data) detailed.push(detailRes.data);
-          // Small delay to avoid 429
           await new Promise(r => setTimeout(r, 250));
         } catch {
           detailed.push({ ...p, name: p.name || "Unknown Place" });
@@ -92,8 +95,29 @@ export default function Explore() {
     }
   };
 
+  const handleCardClick = (place: any) => {
+    setSelectedPlace(place);
+    setShowMap(true);
+  };
+
+  const getPlaceCoords = (place: any) => {
+    const lat = place.point?.coordinates?.[1] ?? place.point?.lat ?? place.lat;
+    const lng = place.point?.coordinates?.[0] ?? place.point?.lon ?? place.lon ?? place.lng;
+    return { lat: parseFloat(lat), lng: parseFloat(lng) };
+  };
+
+  const openAR = (place: any, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const coords = getPlaceCoords(place);
+    if (isNaN(coords.lat) || isNaN(coords.lng)) {
+      toast({ title: "Location unavailable", description: "No coordinates for this place.", variant: "destructive" });
+      return;
+    }
+    setArPlace({ ...place, ...coords });
+  };
+
   return (
-    <div className="p-6">
+    <div className="p-6 h-screen overflow-hidden flex flex-col">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Explore Destinations</h1>
@@ -140,126 +164,192 @@ export default function Explore() {
         ))}
       </div>
 
-      {/* Detail Modal */}
+      {/* AR Viewer */}
+      {arPlace && (
+        <ARViewer
+          lat={arPlace.lat}
+          lng={arPlace.lng}
+          name={arPlace.name}
+          description={arPlace.wikipedia_extracts?.text?.slice(0, 120)}
+          onClose={() => setArPlace(null)}
+        />
+      )}
+
+      {/* Detail Modal with Map */}
       {selectedPlace && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6" onClick={() => setSelectedPlace(null)}>
-          <div className="bg-card rounded-2xl max-w-lg w-full overflow-hidden shadow-elevated animate-fade-in" onClick={(e) => e.stopPropagation()}>
-            <div className="relative h-48">
-              <img
-                src={selectedPlace.preview?.source || fallbackImages[0]}
-                alt={selectedPlace.name}
-                className="w-full h-full object-cover"
-              />
-              <button onClick={() => setSelectedPlace(null)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
-                <X className="w-4 h-4 text-foreground" />
-              </button>
-            </div>
-            <div className="p-5 space-y-3">
-              <h2 className="text-lg font-bold text-card-foreground">{selectedPlace.name}</h2>
-              <div className="flex items-center gap-3 flex-wrap">
-                {selectedPlace.address?.city && (
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <MapPin className="w-3 h-3" />
-                    {[selectedPlace.address.city, selectedPlace.address.state, selectedPlace.address.country].filter(Boolean).join(", ")}
-                  </span>
-                )}
-                {selectedPlace.rate > 0 && (
-                  <span className="flex items-center gap-1 text-xs text-warning font-semibold">
-                    <Star className="w-3 h-3 fill-warning" />{selectedPlace.rate}/7
-                  </span>
-                )}
-              </div>
-              {selectedPlace.kinds && (
-                <div className="flex gap-1.5 flex-wrap">
-                  {selectedPlace.kinds.split(",").slice(0, 5).map((tag: string) => (
-                    <span key={tag} className="px-2 py-0.5 rounded-full bg-secondary text-xs font-medium text-secondary-foreground capitalize">
-                      {tag.replace(/_/g, " ")}
-                    </span>
-                  ))}
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6" onClick={() => { setSelectedPlace(null); setShowMap(false); }}>
+          <div className="bg-card rounded-2xl max-w-2xl w-full overflow-hidden shadow-elevated animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex flex-col md:flex-row">
+              {/* Left: Image + Details */}
+              <div className="flex-1">
+                <div className="relative h-48">
+                  <img
+                    src={selectedPlace.preview?.source || fallbackImages[0]}
+                    alt={selectedPlace.name}
+                    className="w-full h-full object-cover"
+                  />
+                  <button onClick={() => { setSelectedPlace(null); setShowMap(false); }} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
+                    <X className="w-4 h-4 text-foreground" />
+                  </button>
                 </div>
-              )}
-              {selectedPlace.wikipedia_extracts?.text && (
-                <p className="text-sm text-muted-foreground leading-relaxed">{selectedPlace.wikipedia_extracts.text}</p>
-              )}
-              {selectedPlace.url && (
-                <a href={selectedPlace.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
-                  Learn more →
-                </a>
-              )}
+                <div className="p-5 space-y-3">
+                  <h2 className="text-lg font-bold text-card-foreground">{selectedPlace.name}</h2>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {selectedPlace.address?.city && (
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <MapPin className="w-3 h-3" />
+                        {[selectedPlace.address.city, selectedPlace.address.state, selectedPlace.address.country].filter(Boolean).join(", ")}
+                      </span>
+                    )}
+                    {selectedPlace.rate > 0 && (
+                      <span className="flex items-center gap-1 text-xs text-warning font-semibold">
+                        <Star className="w-3 h-3 fill-warning" />{selectedPlace.rate}/7
+                      </span>
+                    )}
+                  </div>
+                  {selectedPlace.kinds && (
+                    <div className="flex gap-1.5 flex-wrap">
+                      {selectedPlace.kinds.split(",").slice(0, 5).map((tag: string) => (
+                        <span key={tag} className="px-2 py-0.5 rounded-full bg-secondary text-xs font-medium text-secondary-foreground capitalize">
+                          {tag.replace(/_/g, " ")}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {selectedPlace.wikipedia_extracts?.text && (
+                    <p className="text-sm text-muted-foreground leading-relaxed line-clamp-4">{selectedPlace.wikipedia_extracts.text}</p>
+                  )}
+                  {/* Action buttons */}
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={() => openAR(selectedPlace)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+                    >
+                      <Eye className="w-4 h-4" />
+                      AR/VR View
+                    </button>
+                    {selectedPlace.url && (
+                      <a href={selectedPlace.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors">
+                        Learn more →
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Map */}
+              {showMap && (() => {
+                const coords = getPlaceCoords(selectedPlace);
+                return !isNaN(coords.lat) && !isNaN(coords.lng) ? (
+                  <div className="w-full md:w-[300px] h-[250px] md:h-auto shrink-0 border-t md:border-t-0 md:border-l border-border">
+                    <MapplsMap
+                      lat={coords.lat}
+                      lng={coords.lng}
+                      name={selectedPlace.name}
+                      zoom={15}
+                      className="w-full h-full min-h-[250px]"
+                    />
+                  </div>
+                ) : null;
+              })()}
             </div>
           </div>
         </div>
       )}
 
-      {/* Results */}
-      {!searched ? (
-        <div className="text-center py-20">
-          <Compass className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <h3 className="font-semibold text-foreground text-lg">Search to discover places</h3>
-          <p className="text-sm text-muted-foreground mt-1">Try "Jaipur", "Goa", "Rishikesh" and more</p>
-        </div>
-      ) : loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 text-primary animate-spin" />
-        </div>
-      ) : places.length === 0 ? (
-        <div className="text-center py-20">
-          <MapPin className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <h3 className="font-semibold text-foreground">No places found</h3>
-          <p className="text-sm text-muted-foreground mt-1">Try a different location or category</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {places.map((place, i) => (
-            <div
-              key={place.xid || i}
-              onClick={() => setSelectedPlace(place)}
-              className="bg-card rounded-2xl overflow-hidden shadow-card hover:shadow-elevated transition-all cursor-pointer group animate-fade-in"
-              style={{ animationDelay: `${i * 0.05}s` }}
-            >
-              <div className="relative h-44 overflow-hidden bg-primary/5">
-                <img
-                  src={place.preview?.source || fallbackImages[i % fallbackImages.length]}
-                  alt={place.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-                <button
-                  onClick={(e) => { e.stopPropagation(); }}
-                  className="absolute top-3 right-3 w-8 h-8 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center hover:bg-card transition-colors"
+      {/* Main Content */}
+      <div className="flex-1 overflow-y-auto">
+        {!searched ? (
+          <div className="text-center py-20">
+            <Compass className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+            <h3 className="font-semibold text-foreground text-lg">Search to discover places</h3>
+            <p className="text-sm text-muted-foreground mt-1">Try "Jaipur", "Goa", "Rishikesh" and more</p>
+          </div>
+        ) : loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          </div>
+        ) : places.length === 0 ? (
+          <div className="text-center py-20">
+            <MapPin className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+            <h3 className="font-semibold text-foreground">No places found</h3>
+            <p className="text-sm text-muted-foreground mt-1">Try a different location or category</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {places.map((place, i) => {
+              const coords = getPlaceCoords(place);
+              const hasCoords = !isNaN(coords.lat) && !isNaN(coords.lng);
+
+              return (
+                <div
+                  key={place.xid || i}
+                  onClick={() => handleCardClick(place)}
+                  className="bg-card rounded-2xl overflow-hidden shadow-card hover:shadow-elevated transition-all cursor-pointer group animate-fade-in"
+                  style={{ animationDelay: `${i * 0.05}s` }}
                 >
-                  <Heart className="w-4 h-4 text-primary" />
-                </button>
-              </div>
-              <div className="p-4">
-                <h3 className="font-semibold text-card-foreground">{place.name}</h3>
-                {place.address?.city && (
-                  <div className="flex items-center gap-1 mt-1">
-                    <MapPin className="w-3 h-3 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">
-                      {[place.address.city, place.address.state].filter(Boolean).join(", ")}
-                    </span>
+                  <div className="relative h-44 overflow-hidden bg-primary/5">
+                    <img
+                      src={place.preview?.source || fallbackImages[i % fallbackImages.length]}
+                      alt={place.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    <div className="absolute top-3 right-3 flex gap-1.5">
+                      {hasCoords && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openAR(place, e); }}
+                          className="w-8 h-8 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center hover:bg-card transition-colors"
+                          title="AR/VR View"
+                        >
+                          <Eye className="w-4 h-4 text-primary" />
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); }}
+                        className="w-8 h-8 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center hover:bg-card transition-colors"
+                      >
+                        <Heart className="w-4 h-4 text-primary" />
+                      </button>
+                    </div>
+                    {hasCoords && (
+                      <div className="absolute bottom-3 left-3 bg-card/80 backdrop-blur-sm px-2 py-1 rounded-lg flex items-center gap-1">
+                        <Map className="w-3 h-3 text-primary" />
+                        <span className="text-[10px] font-medium text-card-foreground">View on map</span>
+                      </div>
+                    )}
                   </div>
-                )}
-                {place.rate > 0 && (
-                  <div className="flex items-center gap-1 mt-2">
-                    <Star className="w-3 h-3 text-warning fill-warning" />
-                    <span className="text-xs font-semibold text-card-foreground">{place.rate}</span>
+                  <div className="p-4">
+                    <h3 className="font-semibold text-card-foreground">{place.name}</h3>
+                    {place.address?.city && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <MapPin className="w-3 h-3 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">
+                          {[place.address.city, place.address.state].filter(Boolean).join(", ")}
+                        </span>
+                      </div>
+                    )}
+                    {place.rate > 0 && (
+                      <div className="flex items-center gap-1 mt-2">
+                        <Star className="w-3 h-3 text-warning fill-warning" />
+                        <span className="text-xs font-semibold text-card-foreground">{place.rate}</span>
+                      </div>
+                    )}
+                    {place.kinds && (
+                      <div className="flex gap-1.5 mt-3 flex-wrap">
+                        {place.kinds.split(",").slice(0, 3).map((tag: string) => (
+                          <span key={tag} className="px-2 py-0.5 rounded-full bg-secondary text-xs font-medium text-secondary-foreground capitalize">
+                            {tag.replace(/_/g, " ")}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-                {place.kinds && (
-                  <div className="flex gap-1.5 mt-3 flex-wrap">
-                    {place.kinds.split(",").slice(0, 3).map((tag: string) => (
-                      <span key={tag} className="px-2 py-0.5 rounded-full bg-secondary text-xs font-medium text-secondary-foreground capitalize">
-                        {tag.replace(/_/g, " ")}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
