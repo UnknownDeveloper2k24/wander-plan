@@ -25,8 +25,10 @@ export default function AIAssistant() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [wakeListening, setWakeListening] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+  const wakeRecognitionRef = useRef<any>(null);
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -34,13 +36,68 @@ export default function AIAssistant() {
 
   const userName = user?.user_metadata?.name || user?.email?.split("@")[0] || "Traveler";
 
+  // Wake word listener - continuously listens for "hey jinny"
+  useEffect(() => {
+    if (open) return; // Don't listen when chat is already open
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const startWakeListener = () => {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+      wakeRecognitionRef.current = recognition;
+
+      recognition.onstart = () => setWakeListening(true);
+      recognition.onend = () => {
+        setWakeListening(false);
+        // Restart if chat isn't open
+        if (!open) {
+          setTimeout(() => {
+            try { startWakeListener(); } catch {}
+          }, 500);
+        }
+      };
+      recognition.onerror = (e: any) => {
+        setWakeListening(false);
+        // Restart on non-fatal errors
+        if (e.error !== "not-allowed" && e.error !== "service-not-allowed") {
+          setTimeout(() => {
+            try { startWakeListener(); } catch {}
+          }, 1000);
+        }
+      };
+      recognition.onresult = (event: any) => {
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript.toLowerCase().trim();
+          if (transcript.includes("hey jinny") || transcript.includes("hey jenny") || transcript.includes("hey ginny")) {
+            recognition.stop();
+            setOpen(true);
+            toast({ title: "🧡 Jinny activated!", description: "Hey! How can I help you?" });
+            break;
+          }
+        }
+      };
+
+      try { recognition.start(); } catch {}
+    };
+
+    startWakeListener();
+
+    return () => {
+      try { wakeRecognitionRef.current?.stop(); } catch {}
+    };
+  }, [open, toast]);
+
   // Set initial greeting when opened with user context
   useEffect(() => {
     if (open && messages.length === 0) {
       setMessages([
         {
           role: "assistant",
-          content: `Hey ${userName}! 👋 I'm your **Personal AI Proxy Agent**. I represent your interests across all your trips.\n\nI can:\n- 🧠 Give personalized suggestions based on your travel history\n- 🤝 Negotiate itineraries in group trips for you\n- 🛡️ Monitor disruptions and alert you proactively\n- 💰 Optimize your budget and track spending\n\nWhat would you like to do?`,
+          content: `Hey ${userName}! 👋 I'm **Jinny** — your travel companion! 🧡\n\nI can:\n- 🧠 Give personalized suggestions based on your travel history\n- 🤝 Negotiate itineraries in group trips for you\n- 🛡️ Monitor disruptions and alert you proactively\n- 💰 Optimize your budget and track spending\n\nWhat would you like to do?`,
         },
       ]);
     }
@@ -61,7 +118,6 @@ export default function AIAssistant() {
         const start = today.toISOString().split("T")[0];
         const end = new Date(today.getTime() + (action.days || 3) * 86400000).toISOString().split("T")[0];
 
-        // Use decoupled insert pattern to avoid RLS race condition
         const { error: insertError } = await supabase.from("trips").insert({
           name: action.name || `Trip to ${action.destination}`,
           destination: action.destination,
@@ -76,7 +132,6 @@ export default function AIAssistant() {
         queryClient.invalidateQueries({ queryKey: ["trips"] });
         toast({ title: "Trip created! 🎉", description: `${action.destination} trip is ready.` });
 
-        // Fetch newly created trip for navigation
         const { data: newTrips } = await supabase.from("trips")
           .select("id")
           .eq("organizer_id", user.id)
@@ -229,16 +284,24 @@ export default function AIAssistant() {
     <>
       {/* Floating draggable bot - always visible */}
       {!open && (
-        <img
-          src={orangeBot}
-          alt="AI Assistant"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          style={{ left: pos.x, top: pos.y }}
-          className="fixed z-50 w-20 h-20 cursor-grab active:cursor-grabbing select-none hover:scale-110 transition-transform drop-shadow-lg animate-fade-in touch-none"
-          draggable={false}
-        />
+        <div className="fixed z-50" style={{ left: pos.x, top: pos.y }}>
+          <img
+            src={orangeBot}
+            alt="Jinny - Your Travel Companion"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            className="w-20 h-20 cursor-grab active:cursor-grabbing select-none hover:scale-110 transition-transform drop-shadow-lg animate-fade-in touch-none"
+            draggable={false}
+          />
+          {/* Wake word indicator */}
+          {wakeListening && (
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-card/90 backdrop-blur-sm px-2 py-0.5 rounded-full border border-border shadow-sm">
+              <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+              <span className="text-[9px] text-muted-foreground font-medium whitespace-nowrap">Say "Hey Jinny"</span>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Chat panel */}
@@ -248,13 +311,13 @@ export default function AIAssistant() {
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-primary/5">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center">
-                <img src={orangeBot} alt="Bot" className="w-8 h-8 object-cover" />
+                <img src={orangeBot} alt="Jinny" className="w-8 h-8 object-cover" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-card-foreground">Your AI Proxy Agent</h3>
+                <h3 className="text-sm font-semibold text-card-foreground">Jinny</h3>
                 <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
-                  Active • Representing {userName}
+                  Your travel companion • {userName}
                 </p>
               </div>
             </div>
@@ -312,7 +375,7 @@ export default function AIAssistant() {
               <div className="flex justify-start">
                 <div className="bg-secondary px-3 py-2 rounded-xl rounded-bl-sm flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                  <span className="text-[11px] text-muted-foreground">Proxy agent thinking...</span>
+                  <span className="text-[11px] text-muted-foreground">Jinny is thinking...</span>
                 </div>
               </div>
             )}
@@ -331,7 +394,7 @@ export default function AIAssistant() {
               </button>
               <input
                 type="text"
-                placeholder="Ask your proxy agent..."
+                placeholder="Ask Jinny anything..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendMessage(input)}
