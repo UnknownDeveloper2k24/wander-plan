@@ -32,6 +32,7 @@ export type Database = {
           priority: number | null
           review_score: number | null
           start_time: string
+          status: string
         }
         Insert: {
           category?: string | null
@@ -50,6 +51,7 @@ export type Database = {
           priority?: number | null
           review_score?: number | null
           start_time: string
+          status?: string
         }
         Update: {
           category?: string | null
@@ -68,6 +70,7 @@ export type Database = {
           priority?: number | null
           review_score?: number | null
           start_time?: string
+          status?: string
         }
         Relationships: [
           {
@@ -75,6 +78,38 @@ export type Database = {
             columns: ["itinerary_id"]
             isOneToOne: false
             referencedRelation: "itineraries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      activity_votes: {
+        Row: {
+          activity_id: string
+          created_at: string
+          id: string
+          user_id: string
+          vote: string
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+          vote: string
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+          vote?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_votes_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
             referencedColumns: ["id"]
           },
         ]
@@ -334,6 +369,10 @@ export type Database = {
     Functions: {
       get_trip_id_from_activity: {
         Args: { p_itinerary_id: string }
+        Returns: string
+      }
+      get_trip_id_from_vote: {
+        Args: { p_activity_id: string }
         Returns: string
       }
       is_trip_member: { Args: { p_trip_id: string }; Returns: boolean }
