@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Search, Star, Heart, MapPin, Loader2, X, Map, Eye, RotateCcw } from "lucide-react";
+import { useState, useRef, useCallback } from "react";
+import { Search, Star, Heart, MapPin, Loader2, X, Map, Eye, RotateCcw, Filter } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import WorldMap from "@/components/WorldMap";
@@ -16,7 +16,30 @@ import travelKayak from "@/assets/travel-kayak.jpg";
 
 const fallbackImages = [destinationAgra, destinationGoa, destinationKerala, travelBeach, travelBoat, travelKayak];
 
-const categories = ["All", "Cultural", "Natural", "Historic", "Architecture", "Religion"];
+// Expanded categories mapped to OpenTripMap "kinds"
+const categories = [
+  { label: "All", kinds: "interesting_places" },
+  { label: "Temples", kinds: "religion" },
+  { label: "Restaurants", kinds: "foods,restaurants" },
+  { label: "Malls & Shopping", kinds: "shops,malls" },
+  { label: "Historic", kinds: "historic" },
+  { label: "Nature", kinds: "natural" },
+  { label: "Architecture", kinds: "architecture" },
+  { label: "Museums", kinds: "museums" },
+  { label: "Amusements", kinds: "amusements" },
+  { label: "Accommodation", kinds: "accomodations" },
+  { label: "Local Shops", kinds: "shops" },
+  { label: "Cultural", kinds: "cultural" },
+];
+
+// Convert OpenTripMap rate (1-7) to 5-star scale
+function toFiveStars(rate: number | undefined): number | null {
+  if (!rate || rate <= 0) return null;
+  return Math.round(((rate / 7) * 5) * 10) / 10;
+}
+
+// Cache type
+type SearchCache = Record<string, any[]>;
 
 export default function Explore() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -31,12 +54,26 @@ export default function Explore() {
   const [streetViewPlace, setStreetViewPlace] = useState<any | null>(null);
   const { toast } = useToast();
 
-  const handleSearch = async (filterOverride?: string) => {
+  // Cache results so switching tabs doesn't lose data
+  const cacheRef = useRef<SearchCache>({});
+
+  const getCacheKey = (query: string, filter: string) => `${query.toLowerCase().trim()}|${filter}`;
+
+  const handleSearch = useCallback(async (filterOverride?: string) => {
     if (!searchQuery.trim()) return;
-    setLoading(true);
-    setSearched(true);
 
     const currentFilter = filterOverride || activeFilter;
+    const cacheKey = getCacheKey(searchQuery, currentFilter);
+
+    // Return cached results if available
+    if (cacheRef.current[cacheKey]) {
+      setPlaces(cacheRef.current[cacheKey]);
+      setSearched(true);
+      return;
+    }
+
+    setLoading(true);
+    setSearched(true);
 
     try {
       const geoRes = await supabase.functions.invoke("nominatim", {
@@ -51,10 +88,11 @@ export default function Explore() {
       }
 
       const { lat, lon } = geoRes.data[0];
+      const catObj = categories.find(c => c.label === currentFilter) || categories[0];
 
-      const kinds = currentFilter === "All" ? "interesting_places" : currentFilter.toLowerCase();
+      // Fetch more places — increased radius and limit
       const placesRes = await supabase.functions.invoke("opentripmap", {
-        body: { action: "radius", lat: parseFloat(lat), lon: parseFloat(lon), radius: 10000, kinds, limit: 30 },
+        body: { action: "radius", lat: parseFloat(lat), lon: parseFloat(lon), radius: 20000, kinds: catObj.kinds, limit: 50 },
       });
 
       if (placesRes.error) throw new Error(placesRes.error.message);
@@ -64,22 +102,27 @@ export default function Explore() {
         ? raw.features.map((f: any) => ({ ...f.properties, point: f.geometry }))
         : Array.isArray(raw) ? raw : [];
 
-      // Fetch details sequentially with delay to avoid rate limiting
+      // Sort by rate descending to prioritize famous places, then fetch details for top results
+      const sorted = [...items].sort((a: any, b: any) => (b.rate || 0) - (a.rate || 0));
+
       const detailed: any[] = [];
-      for (const p of items.slice(0, 8)) {
+      for (const p of sorted.slice(0, 20)) {
         if (!p.xid) continue;
         try {
           const detailRes = await supabase.functions.invoke("opentripmap", {
             body: { action: "details", xid: p.xid },
           });
           if (detailRes.data) detailed.push(detailRes.data);
-          await new Promise(r => setTimeout(r, 250));
+          await new Promise(r => setTimeout(r, 200));
         } catch {
           detailed.push({ ...p, name: p.name || "Unknown Place" });
         }
       }
 
       const results = detailed.filter((p: any) => p.name && p.name.trim() !== "");
+
+      // Cache the results
+      cacheRef.current[cacheKey] = results;
       setPlaces(results);
 
       if (results.length === 0) {
@@ -90,7 +133,7 @@ export default function Explore() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchQuery, activeFilter, toast]);
 
   const handleFilterChange = (filter: string) => {
     setActiveFilter(filter);
@@ -153,17 +196,17 @@ export default function Explore() {
 
       {/* Category Filters */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-        {categories.map((f) => (
+        {categories.map((cat) => (
           <button
-            key={f}
-            onClick={() => handleFilterChange(f)}
+            key={cat.label}
+            onClick={() => handleFilterChange(cat.label)}
             className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
-              activeFilter === f
+              activeFilter === cat.label
                 ? "bg-primary text-primary-foreground"
                 : "bg-card border border-border text-muted-foreground hover:bg-secondary"
             }`}
           >
-            {f}
+            {cat.label}
           </button>
         ))}
       </div>
@@ -215,9 +258,9 @@ export default function Explore() {
                         {[selectedPlace.address.city, selectedPlace.address.state, selectedPlace.address.country].filter(Boolean).join(", ")}
                       </span>
                     )}
-                    {selectedPlace.rate > 0 && (
+                    {toFiveStars(selectedPlace.rate) && (
                       <span className="flex items-center gap-1 text-xs text-warning font-semibold">
-                        <Star className="w-3 h-3 fill-warning" />{selectedPlace.rate}/7
+                        <Star className="w-3 h-3 fill-warning" />{toFiveStars(selectedPlace.rate)}/5
                       </span>
                     )}
                   </div>
@@ -330,7 +373,7 @@ export default function Explore() {
           <div className="text-center py-20">
             <Compass className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
             <h3 className="font-semibold text-foreground text-lg">Search to discover places</h3>
-            <p className="text-sm text-muted-foreground mt-1">Try "Jaipur", "Goa", "Rishikesh" and more</p>
+            <p className="text-sm text-muted-foreground mt-1">Try "Kathmandu", "Paris", "Tokyo" and more</p>
           </div>
         ) : loading ? (
           <div className="flex items-center justify-center py-20">
@@ -347,6 +390,7 @@ export default function Explore() {
             {places.map((place, i) => {
               const coords = getPlaceCoords(place);
               const hasCoords = !isNaN(coords.lat) && !isNaN(coords.lng);
+              const starRating = toFiveStars(place.rate);
 
               return (
                 <div
@@ -395,10 +439,10 @@ export default function Explore() {
                         </span>
                       </div>
                     )}
-                    {place.rate > 0 && (
+                    {starRating && (
                       <div className="flex items-center gap-1 mt-2">
                         <Star className="w-3 h-3 text-warning fill-warning" />
-                        <span className="text-xs font-semibold text-card-foreground">{place.rate}</span>
+                        <span className="text-xs font-semibold text-card-foreground">{starRating}/5</span>
                       </div>
                     )}
                     {place.kinds && (
