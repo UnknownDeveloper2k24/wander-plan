@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useLocation, Link } from "react-router-dom";
-import { LayoutDashboard, CalendarDays, Compass, BookOpen, Users, LogOut, Plus } from "lucide-react";
-import { trips } from "@/data/mockData";
+import { LayoutDashboard, CalendarDays, Compass, BookOpen, Users, LogOut, Plus, MapPin } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { useTrips } from "@/hooks/useTrips";
 
 const navItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Itinerary", url: "/itinerary", icon: CalendarDays, badge: "NEW" },
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+  { title: "Itinerary", url: "/itinerary", icon: CalendarDays },
 ];
 
 const discoverItems = [
@@ -17,8 +18,11 @@ const discoverItems = [
 export function AppSidebar() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const { user, signOut } = useAuth();
+  const { data: trips = [] } = useTrips();
 
   const isActive = (url: string) => location.pathname === url;
+  const userName = user?.user_metadata?.name || user?.email?.split("@")[0] || "Traveler";
 
   return (
     <aside
@@ -26,16 +30,16 @@ export function AppSidebar() {
         collapsed ? "w-[68px]" : "w-[260px]"
       } shrink-0`}
     >
-      {/* User Profile */}
+      {/* Brand */}
       <div className="p-4 border-b border-border">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-lg shrink-0">
-            👩
+          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shrink-0">
+            <MapPin className="w-5 h-5 text-primary-foreground" />
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-card-foreground truncate">Cecilia Puni</p>
-              <p className="text-xs text-muted-foreground">Part-time Traveler</p>
+              <p className="text-sm font-bold text-card-foreground truncate">Radiator Routes</p>
+              <p className="text-xs text-muted-foreground truncate">{userName}</p>
             </div>
           )}
         </div>
@@ -43,32 +47,35 @@ export function AppSidebar() {
 
       {/* New Trip Button */}
       <div className="px-3 pt-4">
-        <button className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 transition-opacity">
+        <Link
+          to="/dashboard"
+          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 transition-opacity"
+        >
           <Plus className="w-4 h-4" />
           {!collapsed && <span>New Trip</span>}
-        </button>
+        </Link>
       </div>
 
-      {/* Trips */}
-      {!collapsed && (
+      {/* Trips from DB */}
+      {!collapsed && trips.length > 0 && (
         <div className="px-3 pt-5">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-2">
-            Trips
+            My Trips
           </p>
-          <div className="space-y-1">
+          <div className="space-y-1 max-h-40 overflow-y-auto">
             {trips.map((trip) => (
               <Link
                 key={trip.id}
-                to={`/itinerary`}
+                to={`/itinerary/${trip.id}`}
                 className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-secondary/60 transition-colors group"
               >
-                <span className="text-lg">{trip.flag}</span>
+                <span className="text-lg">🇮🇳</span>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-card-foreground truncate">
                     {trip.destination}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {trip.duration}, {trip.startDate}
+                    ₹{Number(trip.budget_total).toLocaleString("en-IN")}
                   </p>
                 </div>
               </Link>
@@ -96,14 +103,7 @@ export function AppSidebar() {
               }`}
             >
               <item.icon className="w-[18px] h-[18px] shrink-0" />
-              {!collapsed && (
-                <span className="flex-1">{item.title}</span>
-              )}
-              {!collapsed && item.badge && (
-                <span className="px-1.5 py-0.5 text-[10px] font-bold bg-accent text-accent-foreground rounded">
-                  {item.badge}
-                </span>
-              )}
+              {!collapsed && <span className="flex-1">{item.title}</span>}
             </Link>
           ))}
         </div>
@@ -136,7 +136,10 @@ export function AppSidebar() {
 
       {/* Spacer + Logout */}
       <div className="mt-auto px-3 pb-4">
-        <button className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-primary hover:bg-primary/10 transition-colors w-full">
+        <button
+          onClick={signOut}
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-primary hover:bg-primary/10 transition-colors w-full"
+        >
           <LogOut className="w-[18px] h-[18px]" />
           {!collapsed && <span>Logout</span>}
         </button>
