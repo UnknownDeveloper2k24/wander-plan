@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { MessageCircle, X, Send, Mic, MicOff, Loader2, Bot, Shield, Brain, Wallet, Navigation } from "lucide-react";
+import { MessageCircle, X, Send, Mic, MicOff, Loader2, Shield, Brain, Wallet, Navigation } from "lucide-react";
+import orangeBot from "@/assets/orange-bot.png";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -200,16 +201,41 @@ export default function AIAssistant() {
     sendMessage(prompt);
   };
 
+  // Dragging state
+  const [pos, setPos] = useState({ x: window.innerWidth - 90, y: window.innerHeight - 90 });
+  const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number; dragging: boolean }>({ startX: 0, startY: 0, startPosX: 0, startPosY: 0, dragging: false });
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    dragRef.current = { startX: e.clientX, startY: e.clientY, startPosX: pos.x, startPosY: pos.y, dragging: false };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) d.dragging = true;
+    if (d.dragging) {
+      setPos({ x: Math.max(0, Math.min(window.innerWidth - 70, d.startPosX + dx)), y: Math.max(0, Math.min(window.innerHeight - 70, d.startPosY + dy)) });
+    }
+  };
+  const onPointerUp = () => {
+    if (!dragRef.current.dragging) setOpen(true);
+  };
+
   return (
     <>
-      {/* Floating button */}
+      {/* Floating draggable bot */}
       {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-elevated flex items-center justify-center hover:scale-105 transition-transform animate-fade-in"
-        >
-          <Bot className="w-6 h-6" />
-        </button>
+        <img
+          src={orangeBot}
+          alt="AI Assistant"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          style={{ left: pos.x, top: pos.y }}
+          className="fixed z-50 w-16 h-16 cursor-grab active:cursor-grabbing select-none hover:scale-110 transition-transform drop-shadow-lg animate-fade-in touch-none"
+          draggable={false}
+        />
       )}
 
       {/* Chat panel */}
@@ -218,8 +244,8 @@ export default function AIAssistant() {
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-primary/5">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                <Bot className="w-4 h-4 text-primary" />
+              <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center">
+                <img src={orangeBot} alt="Bot" className="w-8 h-8 object-cover" />
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-card-foreground">Your AI Proxy Agent</h3>
